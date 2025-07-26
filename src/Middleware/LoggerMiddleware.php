@@ -31,6 +31,10 @@ class LoggerMiddleware
             return false;
         }
 
+        if (!Config::get('logger.enabled', true)) {
+            return false;
+        }
+
         $path = $request->path();
         $includes = Config::get('logger.path_filters.include', ['api/*']);
         $excludes = Config::get('logger.path_filters.exclude', []);

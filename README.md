@@ -46,6 +46,7 @@ This creates `config/logger.php` in your application.
 Add these to your `.env` file:
 
 ```env
+APEX_TOOLBOX_ENABLED=true
 APEX_TOOLBOX_TOKEN=your_apextoolbox_token
 ```
 
