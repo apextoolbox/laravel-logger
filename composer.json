@@ -1,0 +1,40 @@
+{
+  "name": "apextoolbox/laravel-logger",
+  "description": "Apex Toolbox Laravel Logger",
+  "version": "1.0.0",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "ApexToolbox\\Logger\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "ApexToolbox\\Logger\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "ApexToolbox\\Logger\\LoggerServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "dev",
+  "require": {
+    "php": ">=8.1",
+    "illuminate/support": "^10 || ^11 || ^12",
+    "illuminate/http": "^10 || ^11 || ^12",
+    "illuminate/log": "^10 || ^11 || ^12"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0",
+    "mockery/mockery": "^1.6",
+    "orchestra/testbench": "^9.0"
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test-coverage": "phpunit --coverage-html coverage"
+  }
+}
