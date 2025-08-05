@@ -181,8 +181,7 @@ class LoggerMiddleware
     protected function getEndpointUrl(): string
     {
         // Only override endpoint if explicitly set for ApexToolbox package development
-        // This requires both the dev endpoint AND a special dev flag to be set
-        if (env('APEX_TOOLBOX_DEV_ENDPOINT') && env('APEX_TOOLBOX_DEV_MODE') === 'true') {
+        if (env('APEX_TOOLBOX_DEV_ENDPOINT')) {
             return env('APEX_TOOLBOX_DEV_ENDPOINT');
         }
 

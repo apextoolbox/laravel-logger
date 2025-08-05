@@ -2,8 +2,12 @@
 
 namespace ApexToolbox\Logger;
 
-use Illuminate\Support\Facades\Log;
+use ApexToolbox\Logger\Handlers\ApexToolboxLogHandler;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Queue\Events\JobAttempted;
+use Illuminate\Console\Events\CommandFinished;
 use function Symfony\Component\Clock\now;
 
 class LoggerServiceProvider extends ServiceProvider
@@ -22,6 +26,14 @@ class LoggerServiceProvider extends ServiceProvider
                 'message' => $log->message,
                 'context' => $log->context,
             ]);
+        });
+
+        Event::listen(JobAttempted::class, function () {
+            ApexToolboxLogHandler::flushBuffer();
+        });
+
+        Event::listen(CommandFinished::class, function () {
+            ApexToolboxLogHandler::flushBuffer();
         });
 
         $this->publishes([
