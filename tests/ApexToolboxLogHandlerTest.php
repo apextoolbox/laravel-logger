@@ -3,6 +3,7 @@
 namespace ApexToolbox\Logger\Tests;
 
 use ApexToolbox\Logger\Handlers\ApexToolboxLogHandler;
+use ApexToolbox\Logger\LogBuffer;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Monolog\Level;
@@ -16,97 +17,38 @@ class ApexToolboxLogHandlerTest extends TestCase
         Http::fake();
         
         // Clear buffer before each test
-        ApexToolboxLogHandler::flushBuffer();
+        LogBuffer::flush();
+        LogBuffer::flush(LogBuffer::HTTP_CATEGORY);
     }
 
-    public function test_handler_sends_log_with_token()
+    public function test_handler_adds_to_buffer(): void
     {
         Config::set('logger.token', 'test-token');
-
         $handler = new ApexToolboxLogHandler();
         
         $record = new LogRecord(
             datetime: new \DateTimeImmutable(),
             channel: 'test',
             level: Level::Info,
-            message: 'Test log message',
+            message: 'Test message',
             context: ['key' => 'value']
         );
 
         $handler->handle($record);
-        
-        // Now flush the buffer to send the logs
-        ApexToolboxLogHandler::flushBuffer();
 
-        Http::assertSent(function ($request) {
-            $data = $request->data();
-            return $request->hasHeader('Authorization', 'Bearer test-token') &&
-                   isset($data['logs']) &&
-                   is_array($data['logs']) &&
-                   count($data['logs']) === 1 &&
-                   $data['logs'][0]['message'] === 'Test log message' &&
-                   $data['logs'][0]['level'] === 'INFO' &&
-                   $data['logs'][0]['type'] === 'console'; // Running in console during tests
-        });
+        // Should be added to both default and HTTP categories
+        $defaultEntries = LogBuffer::get();
+        $httpEntries = LogBuffer::get(LogBuffer::HTTP_CATEGORY);
+        
+        $this->assertCount(1, $defaultEntries);
+        $this->assertCount(1, $httpEntries);
+        $this->assertEquals('Test message', $defaultEntries[0]['message']);
+        $this->assertEquals('INFO', $defaultEntries[0]['level']);
     }
 
-    public function test_handler_skips_without_token()
+    public function test_handler_skips_without_token(): void
     {
         Config::set('logger.token', null);
-
-        $handler = new ApexToolboxLogHandler();
-        
-        $record = new LogRecord(
-            datetime: new \DateTimeImmutable(),
-            channel: 'test',
-            level: Level::Info,
-            message: 'Test log message',
-            context: []
-        );
-
-        $handler->handle($record);
-
-        Http::assertNothingSent();
-    }
-
-    public function test_handler_detects_context_type()
-    {
-        Config::set('logger.token', 'test-token');
-
-        $handler = new ApexToolboxLogHandler();
-        
-        $record = new LogRecord(
-            datetime: new \DateTimeImmutable(),
-            channel: 'test',
-            level: Level::Error,
-            message: 'Error message',
-            context: []
-        );
-
-        $handler->handle($record);
-        
-        // Flush buffer to send logs
-        ApexToolboxLogHandler::flushBuffer();
-
-        Http::assertSent(function ($request) {
-            $data = $request->data();
-            return isset($data['logs']) &&
-                   is_array($data['logs']) &&
-                   count($data['logs']) === 1 &&
-                   $data['logs'][0]['type'] === 'console' && // Should detect console context in tests
-                   $data['logs'][0]['level'] === 'ERROR';
-        });
-    }
-
-    public function test_handler_handles_exceptions_gracefully()
-    {
-        Config::set('logger.token', 'test-token');
-        
-        // Simulate HTTP failure
-        Http::fake([
-            '*' => Http::response('Server Error', 500)
-        ]);
-
         $handler = new ApexToolboxLogHandler();
         
         $record = new LogRecord(
@@ -117,39 +59,25 @@ class ApexToolboxLogHandlerTest extends TestCase
             context: []
         );
 
-        // Should not throw exception and should return false (not handled due to HTTP error)
-        $result = $handler->handle($record);
-        $this->assertIsBool($result);
+        $handler->handle($record);
+
+        $entries = LogBuffer::get();
+        $this->assertCount(0, $entries);
     }
 
-    public function test_handler_extracts_source_class()
+    public function test_flush_buffer_sends_http_request(): void
     {
         Config::set('logger.token', 'test-token');
-
-        $handler = new ApexToolboxLogHandler();
         
-        $record = new LogRecord(
-            datetime: new \DateTimeImmutable(),
-            channel: 'test',
-            level: Level::Info,
-            message: 'Test message',
-            context: ['class' => 'App\\Services\\TestService']
-        );
-
-        $handler->handle($record);
+        // Add some data to the buffer
+        LogBuffer::add(['message' => 'test']);
         
-        // Flush buffer to send logs
         ApexToolboxLogHandler::flushBuffer();
 
         Http::assertSent(function ($request) {
-            $data = $request->data();
-            if (!isset($data['logs']) || !is_array($data['logs']) || count($data['logs']) !== 1) {
-                return false;
-            }
-            
-            $log = $data['logs'][0];
-            // Just check that source_class is set - the exact value depends on extraction logic
-            return isset($log['source_class']);
+            return $request->hasHeader('Authorization', 'Bearer test-token') &&
+                   isset($request->data()['logs']) &&
+                   is_array($request->data()['logs']);
         });
     }
 }

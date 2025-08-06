@@ -10,6 +10,8 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
+use Throwable;
 
 class LoggerMiddleware
 {
@@ -171,9 +173,10 @@ class LoggerMiddleware
                     'response' => $data['response'],
                     'ip_address' => $data['ip_address'],
                     'duration' => microtime(true) - LARAVEL_START,
-                    'logs' => LogBuffer::flush(),
+                    'logs_trace_id' => Str::uuid7()->toString(),
+                    'logs' => LogBuffer::flush(LogBuffer::HTTP_CATEGORY),
                 ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Silently fail
         }
     }

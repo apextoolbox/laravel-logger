@@ -2,85 +2,75 @@
 
 namespace ApexToolbox\Logger\Handlers;
 
-use ApexToolbox\Logger\Services\ContextDetector;
-use ApexToolbox\Logger\Services\SourceClassExtractor;
+use ApexToolbox\Logger\LogBuffer;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Level;
 use Monolog\LogRecord;
+use Throwable;
 
 class ApexToolboxLogHandler extends AbstractProcessingHandler
 {
-    private static array $buffer = [];
-
-    protected ContextDetector $contextDetector;
-    protected SourceClassExtractor $sourceExtractor;
-
     public function __construct($level = Level::Debug, bool $bubble = true)
     {
         parent::__construct($level, $bubble);
-
-        $this->contextDetector = new ContextDetector();
-        $this->sourceExtractor = new SourceClassExtractor();
     }
 
     protected function write(LogRecord $record): void
     {
         if (! Config::get('logger.token')) { return; }
 
-        self::$buffer[] = $this->prepareLogData($record);
+        $data = $this->prepareLogData($record);
+
+        LogBuffer::add($data);
+
+        LogBuffer::add($data, LogBuffer::HTTP_CATEGORY);
     }
 
     protected function prepareLogData(LogRecord $record): array
     {
-        $context = $this->contextDetector->detect();
-        $sourceClass = $this->sourceExtractor->extract($record);
-
         return [
-            'type' => $context,
             'level' => $record->level->getName(),
             'message' => $record->message,
             'context' => $record->context,
-            'source_class' => $sourceClass,
             'timestamp' => $record->datetime->format('Y-m-d H:i:s'),
             'channel' => $record->channel,
+            'source_class' => $record->extra['class'] ?? null,
+            'function' => $record->extra['function'] ?? null,
+            'callType' => $record->extra['callType'] ?? null,
         ];
     }
 
     public static function flushBuffer(): void
     {
-        if (empty(self::$buffer)) { return; }
-
-        try {
-            self::send(self::$buffer);
-        } catch (\Throwable $e) {
-            // Silently fail...
-        } finally {
-            self::$buffer = [];
+        if (empty(LogBuffer::get())) {
+            return;
         }
-    }
 
-    public static function send(array $logs): void
-    {
+        $token = Config::get('logger.token');
+
+        if (! $token) {
+            return;
+        }
+
+        $url = env('APEX_TOOLBOX_DEV_ENDPOINT')
+            ? env('APEX_TOOLBOX_DEV_ENDPOINT')
+            : 'https://apextoolbox.com/api/v1/logs';
+
         try {
-            $token = Config::get('logger.token');
-
-            if (! $token) { return; }
-
-            $url = env('APEX_TOOLBOX_DEV_ENDPOINT')
-                ? env('APEX_TOOLBOX_DEV_ENDPOINT')
-                : 'https://apextoolbox.com/api/v1/logs';
-
             Http::withHeaders([
                 'Authorization' => 'Bearer ' . $token,
                 'Content-Type' => 'application/json',
             ])
                 ->timeout(2)
-                ->post($url, [ 'logs' => $logs ]);
-
-        } catch (\Throwable $e) {
-            // Silently fail - never break the application
+                ->post($url, [
+                    'logs_trace_id' => Str::uuid7()->toString(),
+                    'logs' => LogBuffer::flush()
+                ]);
+        } catch (Throwable $e) {
+            // Silently fail...
         }
     }
 }
