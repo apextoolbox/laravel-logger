@@ -126,7 +126,8 @@ class LoggerMiddleware
     protected function filterBody(array $body): array
     {
         $excludeFields = Config::get('logger.body.exclude', []);
-        $filtered = Arr::except($body, $excludeFields);
+        $maskFields = Config::get('logger.body.mask', []);
+        $filtered = $this->recursivelyFilterSensitiveData($body, $excludeFields, $maskFields);
         
         $maxSize = Config::get('logger.body.max_size', 10240);
         $serialized = json_encode($filtered);
@@ -141,7 +142,8 @@ class LoggerMiddleware
     protected function filterResponse(array $response): array
     {
         $excludeFields = Config::get('logger.response.exclude', []);
-        $filtered = Arr::except($response, $excludeFields);
+        $maskFields = Config::get('logger.response.mask', []);
+        $filtered = $this->recursivelyFilterSensitiveData($response, $excludeFields, $maskFields);
 
         $maxSize = Config::get('logger.response.max_size', 10240);
         $serialized = json_encode($filtered);
@@ -205,5 +207,34 @@ class LoggerMiddleware
 
         // Production endpoint - hardcoded (used by all users, including their local dev)
         return 'https://apextoolbox.com/api/v1/logs';
+    }
+
+    protected function recursivelyFilterSensitiveData(array $data, array $excludeFields, array $maskFields = [], string $maskValue = '*******'): array
+    {
+        $filtered = [];
+        
+        foreach ($data as $key => $value) {
+            $keyLower = strtolower($key);
+            
+            // Skip if key is in exclude list (case-insensitive)
+            if (in_array($keyLower, array_map('strtolower', $excludeFields))) {
+                continue;
+            }
+            
+            // Mask if key is in mask list (case-insensitive)
+            if (in_array($keyLower, array_map('strtolower', $maskFields))) {
+                $filtered[$key] = $maskValue;
+                continue;
+            }
+            
+            // Recursively filter nested arrays
+            if (is_array($value)) {
+                $filtered[$key] = $this->recursivelyFilterSensitiveData($value, $excludeFields, $maskFields, $maskValue);
+            } else {
+                $filtered[$key] = $value;
+            }
+        }
+        
+        return $filtered;
     }
 }

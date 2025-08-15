@@ -112,8 +112,12 @@ Configure which routes to track:
     'exclude' => [
         'password', 'password_confirmation', 'token', 'secret',
         'access_token', 'refresh_token', 'api_key', 'private_key',
-        'ssn', 'social_security', 'credit_card', 'card_number', 'cvv',
-        // ... more sensitive fields
+        // ... more sensitive fields that should be completely removed
+    ],
+    'mask' => [
+        'ssn', 'social_security', 'phone', 'email', 'address',
+        'postal_code', 'zip_code',
+        // ... fields that should be masked with '*******'
     ],
 ],
 
@@ -121,10 +125,57 @@ Configure which routes to track:
     'exclude' => [
         'password', 'password_confirmation', 'token', 'secret',
         'access_token', 'refresh_token', 'api_key', 'private_key',
-        'ssn', 'social_security', 'credit_card', 'card_number', 'cvv',
-        // ... more sensitive fields
+        // ... more sensitive fields that should be completely removed
+    ],
+    'mask' => [
+        'ssn', 'social_security', 'phone', 'email', 'address',
+        'postal_code', 'zip_code',
+        // ... fields that should be masked with '*******'
     ],
 ],
+```
+
+### Data Filtering Options
+
+You have two options for protecting sensitive data:
+
+**1. Exclude (Complete Removal)**
+- Fields listed in `exclude` arrays are completely removed from logs
+- Use for highly sensitive data like passwords, tokens, API keys
+- Data structure changes (field disappears entirely)
+
+**2. Mask (Value Replacement)**  
+- Fields listed in `mask` arrays are replaced with `'*******'`
+- Use for PII that you want to track structurally but hide values
+- Data structure preserved (field exists but value is masked)
+- Works recursively in nested objects/arrays
+- Case-insensitive matching (`SSN`, `ssn`, `Ssn` all match)
+
+**Example:**
+```php
+// Input data
+[
+    'user' => [
+        'name' => 'John Doe',
+        'password' => 'secret123',      // Will be excluded (removed)
+        'ssn' => '123-45-6789',        // Will be masked to '*******'
+        'profile' => [
+            'email' => 'john@test.com', // Will be masked to '*******'
+            'token' => 'bearer-xyz'     // Will be excluded (removed)
+        ]
+    ]
+]
+
+// Logged data
+[
+    'user' => [
+        'name' => 'John Doe',
+        'ssn' => '*******',
+        'profile' => [
+            'email' => '*******'
+        ]
+    ]
+]
 ```
 
 ### ⚠️ Security Disclaimer

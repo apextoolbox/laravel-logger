@@ -71,6 +71,15 @@ return [
             'x-private-key',
             'authentication',
         ],
+        'mask' => [
+            'ssn',
+            'social_security', 
+            'phone',
+            'email',
+            'address',
+            'postal_code',
+            'zip_code',
+        ],
     ],
 
     /*
@@ -95,13 +104,21 @@ return [
             'private_key',
             'auth',
             'authorization',
-            'ssn',
             'social_security',
             'credit_card',
             'card_number',
             'cvv',
             'pin',
             'otp',
+        ],
+        'mask' => [
+            'ssn',
+            'social_security', 
+            'phone',
+            'email',
+            'address',
+            'postal_code',
+            'zip_code',
         ],
     ],
 
@@ -128,13 +145,21 @@ return [
             'private_key',
             'auth',
             'authorization',
-            'ssn',
             'social_security',
             'credit_card',
             'card_number',
             'cvv',
             'pin',
             'otp',
-        ]
+        ],
+        'mask' => [
+            'ssn',
+            'social_security', 
+            'phone',
+            'email',
+            'address',
+            'postal_code',
+            'zip_code',
+        ],
     ]
 ];

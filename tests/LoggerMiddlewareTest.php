@@ -395,6 +395,264 @@ class LoggerMiddlewareTest extends TestCase
         $this->assertEquals('203.0.113.4', $data['ip_address']);
     }
 
+    public function test_recursive_filtering_removes_nested_sensitive_data()
+    {
+        $excludeFields = ['password', 'token', 'ssn'];
+        
+        $data = [
+            'user' => [
+                'name' => 'John',
+                'password' => 'secret123',
+                'profile' => [
+                    'email' => 'john@example.com',
+                    'ssn' => '123-45-6789',
+                    'address' => 'Main St',
+                    'nested' => [
+                        'token' => 'bearer-token',
+                        'public_info' => 'visible'
+                    ]
+                ]
+            ],
+            'token' => 'top-level-token',
+            'public_data' => 'visible'
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields]);
+        
+        // Top level sensitive data should be removed
+        $this->assertArrayNotHasKey('token', $filtered);
+        $this->assertArrayHasKey('public_data', $filtered);
+        $this->assertArrayHasKey('user', $filtered);
+        
+        // Nested sensitive data should be removed
+        $this->assertArrayNotHasKey('password', $filtered['user']);
+        $this->assertArrayHasKey('name', $filtered['user']);
+        $this->assertArrayHasKey('profile', $filtered['user']);
+        
+        // Deeply nested sensitive data should be removed
+        $this->assertArrayNotHasKey('ssn', $filtered['user']['profile']);
+        $this->assertArrayHasKey('email', $filtered['user']['profile']);
+        $this->assertArrayHasKey('address', $filtered['user']['profile']);
+        $this->assertArrayHasKey('nested', $filtered['user']['profile']);
+        
+        // Very deeply nested sensitive data should be removed
+        $this->assertArrayNotHasKey('token', $filtered['user']['profile']['nested']);
+        $this->assertArrayHasKey('public_info', $filtered['user']['profile']['nested']);
+    }
+
+    public function test_filter_body_uses_recursive_filtering()
+    {
+        Config::set('logger.body.exclude', ['password', 'secret']);
+        
+        $body = [
+            'name' => 'John',
+            'user' => [
+                'password' => 'secret123',
+                'email' => 'john@example.com',
+                'nested' => [
+                    'secret' => 'api-key',
+                    'public' => 'data'
+                ]
+            ]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('filterBody', [$body]);
+        
+        $this->assertArrayHasKey('name', $filtered);
+        $this->assertArrayHasKey('user', $filtered);
+        $this->assertArrayNotHasKey('password', $filtered['user']);
+        $this->assertArrayHasKey('email', $filtered['user']);
+        $this->assertArrayNotHasKey('secret', $filtered['user']['nested']);
+        $this->assertArrayHasKey('public', $filtered['user']['nested']);
+    }
+
+    public function test_filter_response_uses_recursive_filtering()
+    {
+        Config::set('logger.response.exclude', ['token', 'private_key']);
+        
+        $response = [
+            'status' => 'success',
+            'user' => [
+                'id' => 123,
+                'token' => 'bearer-token',
+                'credentials' => [
+                    'private_key' => 'rsa-key',
+                    'public_key' => 'public-rsa'
+                ]
+            ]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('filterResponse', [$response]);
+        
+        $this->assertArrayHasKey('status', $filtered);
+        $this->assertArrayHasKey('user', $filtered);
+        $this->assertArrayHasKey('id', $filtered['user']);
+        $this->assertArrayNotHasKey('token', $filtered['user']);
+        $this->assertArrayHasKey('credentials', $filtered['user']);
+        $this->assertArrayNotHasKey('private_key', $filtered['user']['credentials']);
+        $this->assertArrayHasKey('public_key', $filtered['user']['credentials']);
+    }
+
+    public function test_recursive_filtering_is_case_insensitive()
+    {
+        $excludeFields = ['Password', 'TOKEN'];
+        
+        $data = [
+            'password' => 'secret',
+            'token' => 'bearer',
+            'PASSWORD' => 'secret2',
+            'Token' => 'bearer2',
+            'user' => [
+                'password' => 'nested-secret',
+                'TOKEN' => 'nested-bearer'
+            ]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields]);
+        
+        // All variations should be filtered regardless of case
+        $this->assertArrayNotHasKey('password', $filtered);
+        $this->assertArrayNotHasKey('token', $filtered);
+        $this->assertArrayNotHasKey('PASSWORD', $filtered);
+        $this->assertArrayNotHasKey('Token', $filtered);
+        $this->assertArrayNotHasKey('password', $filtered['user']);
+        $this->assertArrayNotHasKey('TOKEN', $filtered['user']);
+    }
+
+    public function test_masking_replaces_sensitive_fields_with_default_value()
+    {
+        $excludeFields = [];
+        $maskFields = ['ssn', 'phone'];
+        
+        $data = [
+            'name' => 'John',
+            'ssn' => '123-45-6789',
+            'phone' => '555-1234',
+            'email' => 'john@example.com'
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields, $maskFields]);
+        
+        $this->assertEquals('John', $filtered['name']);
+        $this->assertEquals('*******', $filtered['ssn']);
+        $this->assertEquals('*******', $filtered['phone']);
+        $this->assertEquals('john@example.com', $filtered['email']);
+    }
+
+    public function test_masking_works_with_nested_arrays()
+    {
+        $excludeFields = [];
+        $maskFields = ['ssn', 'phone'];
+        
+        $data = [
+            'user' => [
+                'name' => 'John',
+                'ssn' => '123-45-6789',
+                'profile' => [
+                    'phone' => '555-1234',
+                    'address' => 'Main St'
+                ]
+            ]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields, $maskFields]);
+        
+        $this->assertEquals('John', $filtered['user']['name']);
+        $this->assertEquals('*******', $filtered['user']['ssn']);
+        $this->assertEquals('*******', $filtered['user']['profile']['phone']);
+        $this->assertEquals('Main St', $filtered['user']['profile']['address']);
+    }
+
+    public function test_masking_is_case_insensitive()
+    {
+        $excludeFields = [];
+        $maskFields = ['SSN', 'Phone'];
+        
+        $data = [
+            'ssn' => '123-45-6789',
+            'phone' => '555-1234',
+            'SSN' => '987-65-4321',
+            'PHONE' => '555-5678'
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields, $maskFields]);
+        
+        $this->assertEquals('*******', $filtered['ssn']);
+        $this->assertEquals('*******', $filtered['phone']);
+        $this->assertEquals('*******', $filtered['SSN']);
+        $this->assertEquals('*******', $filtered['PHONE']);
+    }
+
+    public function test_masking_with_custom_mask_value()
+    {
+        $excludeFields = [];
+        $maskFields = ['ssn'];
+        $customMaskValue = '[MASKED]';
+        
+        $data = ['ssn' => '123-45-6789'];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields, $maskFields, $customMaskValue]);
+        
+        $this->assertEquals('[MASKED]', $filtered['ssn']);
+    }
+
+    public function test_exclude_takes_precedence_over_mask()
+    {
+        $excludeFields = ['ssn'];
+        $maskFields = ['ssn', 'phone'];
+        
+        $data = [
+            'ssn' => '123-45-6789',
+            'phone' => '555-1234'
+        ];
+        
+        $filtered = $this->invokePrivateMethod('recursivelyFilterSensitiveData', [$data, $excludeFields, $maskFields]);
+        
+        // SSN should be excluded (not present), phone should be masked
+        $this->assertArrayNotHasKey('ssn', $filtered);
+        $this->assertEquals('*******', $filtered['phone']);
+    }
+
+    public function test_filter_body_uses_mask_configuration()
+    {
+        Config::set('logger.body.exclude', []);
+        Config::set('logger.body.mask', ['ssn', 'phone']);
+        
+        $body = [
+            'name' => 'John',
+            'ssn' => '123-45-6789',
+            'phone' => '555-1234'
+        ];
+        
+        $filtered = $this->invokePrivateMethod('filterBody', [$body]);
+        
+        $this->assertEquals('John', $filtered['name']);
+        $this->assertEquals('*******', $filtered['ssn']);
+        $this->assertEquals('*******', $filtered['phone']);
+    }
+
+    public function test_filter_response_uses_mask_configuration()
+    {
+        Config::set('logger.response.exclude', []);
+        Config::set('logger.response.mask', ['email', 'address']);
+        
+        $response = [
+            'status' => 'success',
+            'user' => [
+                'id' => 123,
+                'email' => 'john@example.com',
+                'address' => 'Main St'
+            ]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('filterResponse', [$response]);
+        
+        $this->assertEquals('success', $filtered['status']);
+        $this->assertEquals(123, $filtered['user']['id']);
+        $this->assertEquals('*******', $filtered['user']['email']);
+        $this->assertEquals('*******', $filtered['user']['address']);
+    }
+
     private function invokePrivateMethod(string $methodName, array $parameters = [], $object = null)
     {
         $target = $object ?: $this->middleware;
