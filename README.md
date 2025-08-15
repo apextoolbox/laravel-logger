@@ -69,6 +69,76 @@ Route::middleware('track.request')->group(function () {
 });
 ```
 
+## Configuration
+
+Publish the configuration file:
+
+```bash
+php artisan vendor:publish --provider="ApexToolbox\Logger\LoggerServiceProvider"
+```
+
+### Path Filtering
+
+Configure which routes to track:
+
+```php
+// config/logger.php
+'path_filters' => [
+    'include' => [
+        'api/*',        // Track all API routes
+        // '*',         // Uncomment to track ALL routes
+    ],
+    'exclude' => [
+        'api/health',   // Skip health checks
+        'api/ping',     // Skip ping endpoints
+    ],
+],
+```
+
+### Security Configuration
+
+**⚠️ IMPORTANT SECURITY NOTICE**: This package automatically filters sensitive data from logs to protect your users' privacy. The default configuration excludes common sensitive fields from headers, request bodies, and responses.
+
+```php
+// config/logger.php
+'headers' => [
+    'exclude' => [
+        'authorization', 'x-api-key', 'cookie',
+        // ... more sensitive headers
+    ],
+],
+
+'body' => [
+    'exclude' => [
+        'password', 'password_confirmation', 'token', 'secret',
+        'access_token', 'refresh_token', 'api_key', 'private_key',
+        'ssn', 'social_security', 'credit_card', 'card_number', 'cvv',
+        // ... more sensitive fields
+    ],
+],
+
+'response' => [
+    'exclude' => [
+        'password', 'password_confirmation', 'token', 'secret',
+        'access_token', 'refresh_token', 'api_key', 'private_key',
+        'ssn', 'social_security', 'credit_card', 'card_number', 'cvv',
+        // ... more sensitive fields
+    ],
+],
+```
+
+### ⚠️ Security Disclaimer
+
+**YOU ARE RESPONSIBLE** for configuring the sensitive data filters appropriately for your application. While this package provides sensible defaults to protect common sensitive fields, **you must review and customize the exclude lists** to ensure all sensitive data specific to your application is properly filtered.
+
+**The package maintainers are NOT liable** for any sensitive data that may be logged if you:
+- Modify or remove the default security filters
+- Add custom sensitive fields without proper exclusion
+- Disable the filtering mechanisms
+- Misconfigure the security settings
+
+Always review your logs to ensure no sensitive data is being transmitted before deploying to production.
+
 ## License
 
 MIT

@@ -136,9 +136,9 @@ class LoggerMiddlewareTest extends TestCase
         $this->assertArrayHasKey('accept', $filtered);
     }
 
-    public function test_filter_headers_includes_all_when_sensitive_allowed()
+    public function test_filter_headers_includes_all_when_no_exclusions()
     {
-        Config::set('logger.headers.include_sensitive', true);
+        Config::set('logger.headers.exclude', []);
         
         $headers = [
             'authorization' => ['Bearer token'],
@@ -273,6 +273,126 @@ class LoggerMiddlewareTest extends TestCase
         $this->invokePrivateMethod('sendSyncRequest', [$data]);
         
         $this->assertTrue(true); // If we get here, no exception was thrown
+    }
+
+    public function test_filter_response_excludes_sensitive_fields()
+    {
+        Config::set('logger.response.exclude', ['password', 'token', 'secret']);
+        
+        $response = [
+            'user' => 'John',
+            'password' => 'secret123',
+            'token' => 'bearer-token',
+            'secret' => 'api-key',
+            'data' => ['id' => 123]
+        ];
+        
+        $filtered = $this->invokePrivateMethod('filterResponse', [$response]);
+        
+        $this->assertArrayNotHasKey('password', $filtered);
+        $this->assertArrayNotHasKey('token', $filtered);
+        $this->assertArrayNotHasKey('secret', $filtered);
+        $this->assertArrayHasKey('user', $filtered);
+        $this->assertArrayHasKey('data', $filtered);
+    }
+
+    public function test_filter_response_truncates_large_content()
+    {
+        Config::set('logger.response.max_size', 20);
+        
+        $response = ['large_field' => str_repeat('x', 100)];
+        
+        $filtered = $this->invokePrivateMethod('filterResponse', [$response]);
+        
+        $this->assertArrayHasKey('_truncated', $filtered);
+        $this->assertEquals('Response too large, truncated', $filtered['_truncated']);
+    }
+
+    public function test_get_response_content_filters_json_response()
+    {
+        Config::set('logger.response.exclude', ['password', 'token']);
+        
+        $data = ['user' => 'John', 'password' => 'secret', 'token' => 'abc123'];
+        $response = new JsonResponse($data);
+        
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        
+        $this->assertArrayNotHasKey('password', $content);
+        $this->assertArrayNotHasKey('token', $content);
+        $this->assertArrayHasKey('user', $content);
+    }
+
+    public function test_get_real_ip_address_from_cloudflare()
+    {
+        $request = Request::create('/test', 'GET');
+        $request->headers->set('CF-Connecting-IP', '203.0.113.1');
+        
+        $ip = $this->invokePrivateMethod('getRealIpAddress', [$request]);
+        
+        $this->assertEquals('203.0.113.1', $ip);
+    }
+
+    public function test_get_real_ip_address_from_x_forwarded_for()
+    {
+        $request = Request::create('/test', 'GET');
+        $request->headers->set('X-Forwarded-For', '203.0.113.2, 192.168.1.1');
+        
+        $ip = $this->invokePrivateMethod('getRealIpAddress', [$request]);
+        
+        $this->assertEquals('203.0.113.2', $ip);
+    }
+
+    public function test_get_real_ip_address_skips_private_ranges()
+    {
+        $request = Request::create('/test', 'GET');
+        $request->headers->set('X-Forwarded-For', '192.168.1.1');
+        
+        $ip = $this->invokePrivateMethod('getRealIpAddress', [$request]);
+        
+        // Should fallback to request IP since 192.168.1.1 is private
+        $this->assertEquals('127.0.0.1', $ip);
+    }
+
+    public function test_get_real_ip_address_fallback_to_request_ip()
+    {
+        $request = Request::create('/test', 'GET');
+        // Mock the request IP method
+        $request = Mockery::mock(Request::class);
+        $request->shouldReceive('header')->andReturn(null);
+        $request->shouldReceive('ip')->andReturn('127.0.0.1');
+        
+        $ip = $this->invokePrivateMethod('getRealIpAddress', [$request]);
+        
+        $this->assertEquals('127.0.0.1', $ip);
+    }
+
+    public function test_prepare_tracking_data_calculates_duration()
+    {
+        // Define LARAVEL_START constant for this test
+        if (!defined('LARAVEL_START')) {
+            define('LARAVEL_START', microtime(true) - 0.1); // 100ms ago
+        }
+        
+        $request = Request::create('/test', 'GET');
+        $response = new Response('test');
+        
+        $data = $this->invokePrivateMethod('prepareTrackingData', [$request, $response]);
+        
+        $this->assertArrayHasKey('duration', $data);
+        $this->assertIsNumeric($data['duration']);
+        $this->assertGreaterThan(0, $data['duration']);
+    }
+
+    public function test_prepare_tracking_data_includes_ip_address()
+    {
+        $request = Request::create('/test', 'GET');
+        $request->headers->set('CF-Connecting-IP', '203.0.113.4');
+        $response = new Response('test');
+        
+        $data = $this->invokePrivateMethod('prepareTrackingData', [$request, $response]);
+        
+        $this->assertArrayHasKey('ip_address', $data);
+        $this->assertEquals('203.0.113.4', $data['ip_address']);
     }
 
     private function invokePrivateMethod(string $methodName, array $parameters = [], $object = null)

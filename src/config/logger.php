@@ -63,6 +63,13 @@ return [
             'authorization',
             'x-api-key',
             'cookie',
+            'x-auth-token',
+            'x-access-token',
+            'x-refresh-token',
+            'bearer',
+            'x-secret',
+            'x-private-key',
+            'authentication',
         ],
     ],
 
@@ -81,7 +88,53 @@ return [
             'password',
             'password_confirmation',
             'token',
+            'access_token',
+            'refresh_token',
+            'api_key',
             'secret',
+            'private_key',
+            'auth',
+            'authorization',
+            'ssn',
+            'social_security',
+            'credit_card',
+            'card_number',
+            'cvv',
+            'pin',
+            'otp',
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Response Configuration
+    |--------------------------------------------------------------------------
+    | The 'exclude' array defines fields that will be excluded from the response body.
+    | Common fields like 'token', 'password', and 'password_confirmation'
+    | are excluded by default to protect sensitive information from being logged.
+    | You can modify this array to include or exclude additional fields as needed.
+    | This helps ensure that sensitive data is not accidentally logged in responses.
+    |--------------------------------------------------------------------------
+    */
+    'response' => [
+        'exclude' => [
+            'password',
+            'password_confirmation',
+            'token',
+            'access_token',
+            'refresh_token',
+            'api_key',
+            'secret',
+            'private_key',
+            'auth',
+            'authorization',
+            'ssn',
+            'social_security',
+            'credit_card',
+            'card_number',
+            'cvv',
+            'pin',
+            'otp',
+        ]
+    ]
 ];

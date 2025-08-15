@@ -118,12 +118,9 @@ class LoggerMiddleware
 
     protected function filterHeaders(array $headers): array
     {
-        if (!Config::get('logger.headers.include_sensitive', false)) {
-            $excludeHeaders = Config::get('logger.headers.exclude', []);
-            return Arr::except($headers, $excludeHeaders);
-        }
+        $excludeHeaders = Config::get('logger.headers.exclude', []);
 
-        return $headers;
+        return Arr::except($headers, $excludeHeaders);
     }
 
     protected function filterBody(array $body): array
@@ -141,10 +138,25 @@ class LoggerMiddleware
         return $filtered;
     }
 
+    protected function filterResponse(array $response): array
+    {
+        $excludeFields = Config::get('logger.response.exclude', []);
+        $filtered = Arr::except($response, $excludeFields);
+
+        $maxSize = Config::get('logger.response.max_size', 10240);
+        $serialized = json_encode($filtered);
+
+        if (strlen($serialized) > $maxSize) {
+            return ['_truncated' => 'Response too large, truncated'];
+        }
+
+        return $filtered;
+    }
+
     protected function getResponseContent($response): array|string|null
     {
         if ($response instanceof JsonResponse) {
-            return $response->getData(true);
+            return $this->filterResponse($response->getData(true));
         }
 
         if ($response instanceof Response) {
