@@ -71,6 +71,8 @@ class LoggerMiddleware
 
     protected function prepareTrackingData(Request $request, $response): array
     {
+        $start = defined('LARAVEL_START') ? LARAVEL_START : $request->server('REQUEST_TIME_FLOAT');
+
         return [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
@@ -79,6 +81,7 @@ class LoggerMiddleware
             'status' => $response->getStatusCode(),
             'response' => $this->getResponseContent($response),
             'ip_address' => $this->getRealIpAddress($request),
+            'duration' => $start ? floor((microtime(true) - $start) * 1000) : null,
         ];
     }
 
@@ -172,7 +175,7 @@ class LoggerMiddleware
                     'status_code' => $data['status'],
                     'response' => $data['response'],
                     'ip_address' => $data['ip_address'],
-                    'duration' => microtime(true) - LARAVEL_START,
+                    'duration' => $data['duration'],
                     'logs_trace_id' => Str::uuid7()->toString(),
                     'logs' => LogBuffer::flush(LogBuffer::HTTP_CATEGORY),
                 ]);
