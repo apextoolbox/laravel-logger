@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-01-15
+
+### 🚀 Added
+- **Masking Feature**: New data masking capability to replace sensitive field values with `'*******'` instead of removing them entirely
+  - Configure maskable fields in `logger.body.mask` and `logger.response.mask` arrays
+  - Preserves data structure while protecting sensitive values
+  - Case-insensitive field matching (`SSN`, `ssn`, `Ssn` all work)
+  - Works recursively in nested objects and arrays
+- **Enhanced Security Configuration**: Added comprehensive default mask fields including `ssn`, `social_security`, `phone`, `email`, `address`, `postal_code`, `zip_code`
+
+### 🔧 Enhanced
+- **Recursive Filtering**: Complete rewrite of sensitive data filtering to work at any nesting level
+  - Previous filtering only worked at top-level fields
+  - Now handles deeply nested structures like `user.profile.credentials.private_key`
+  - Case-insensitive matching for all sensitive field detection
+- **Security Priority**: Exclude takes precedence over mask (if field appears in both lists, it gets excluded)
+- **Configuration Expansion**: Added more comprehensive sensitive field defaults for better out-of-the-box security
+
+### 📚 Documentation
+- **Updated README**: Added complete masking documentation with examples
+- **Data Filtering Guide**: Clear explanation of when to use exclude vs mask
+- **Real-world Examples**: Before/after data transformation examples
+- **Security Best Practices**: Enhanced security disclaimers and liability protection
+
+### 🧪 Testing
+- **Comprehensive Test Suite**: Added 8+ new tests covering masking functionality
+  - Nested array masking tests
+  - Case-insensitive masking validation
+  - Custom mask value support
+  - Priority testing (exclude vs mask)
+  - Integration tests for body and response filtering
+- **Enhanced Existing Tests**: Updated recursive filtering tests for new functionality
+
+### 🛡️ Security
+- **Enhanced Legal Protection**: Updated LICENSE with additional security disclaimer
+- **Secure Masking Implementation**: Masking system designed to prevent user injection of malicious values
+- **Default Mask Value**: Simple `'*******'` replacement prevents information leakage
+
+### ⚙️ Technical Details
+- **New Method**: `recursivelyFilterSensitiveData()` with masking support
+- **Backward Compatibility**: All existing configurations continue to work unchanged
+- **Performance**: Optimized recursive filtering with single-pass processing
+
+### 📋 Configuration Example
+```php
+'body' => [
+    'exclude' => ['password', 'token', 'secret'],     // Completely removed
+    'mask' => ['ssn', 'phone', 'email', 'address'],  // Replaced with '*******'
+],
+```
+
+### 🔄 Migration
+No migration required - this release is fully backward compatible. Existing configurations will continue to work as before. New masking features are opt-in.
+
 ## [2.0.0] - 2025-01-08
 
 ### Changed
