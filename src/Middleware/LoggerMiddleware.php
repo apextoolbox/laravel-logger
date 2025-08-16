@@ -19,9 +19,13 @@ class LoggerMiddleware
     {
         $response = $next($request);
 
-        if ($this->shouldTrack($request)) {
-            $data = $this->prepareTrackingData($request, $response);
-            $this->sendSyncRequest($data);
+        try {
+            if ($this->shouldTrack($request)) {
+                $data = $this->prepareTrackingData($request, $response);
+                $this->sendSyncRequest($data);
+            }
+        } catch (Throwable $e) {
+            // Silently fail
         }
 
         return $response;
