@@ -3,10 +3,13 @@
 namespace ApexToolbox\Logger;
 
 use ApexToolbox\Logger\Handlers\ApexToolboxLogHandler;
+use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Queue\Events\JobAttempted;
 use Illuminate\Console\Events\CommandFinished;
+use Throwable;
 
 class LoggerServiceProvider extends ServiceProvider
 {
@@ -23,6 +26,15 @@ class LoggerServiceProvider extends ServiceProvider
 
         Event::listen(CommandFinished::class, function () {
             ApexToolboxLogHandler::flushBuffer();
+        });
+
+        // Register exception handler using Laravel's Handler interface
+        $this->app->extend(ExceptionHandler::class, function ($handler, $app) {
+            $handler->reportable(function (Throwable $exception) {
+                ApexToolboxExceptionHandler::capture($exception);
+            });
+            
+            return $handler;
         });
 
         $this->publishes([

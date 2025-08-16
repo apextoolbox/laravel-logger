@@ -3,6 +3,7 @@
 namespace ApexToolbox\Logger\Middleware;
 
 use ApexToolbox\Logger\LogBuffer;
+use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -19,9 +20,13 @@ class LoggerMiddleware
     {
         $response = $next($request);
 
-        if ($this->shouldTrack($request)) {
-            $data = $this->prepareTrackingData($request, $response);
-            $this->sendSyncRequest($data);
+        try {
+            if ($this->shouldTrack($request)) {
+                $data = $this->prepareTrackingData($request, $response);
+                $this->sendSyncRequest($data);
+            }
+        } catch (Throwable $e) {
+            // ...
         }
 
         return $response;
@@ -73,16 +78,24 @@ class LoggerMiddleware
     {
         $start = defined('LARAVEL_START') ? LARAVEL_START : $request->server('REQUEST_TIME_FLOAT');
 
-        return [
+        $data = [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
             'headers' => $this->filterHeaders($request->headers->all()),
             'body' => $this->filterBody($request->all()),
-            'status' => $response->getStatusCode(),
-            'response' => $this->getResponseContent($response),
+            'status' => $response ? $response->getStatusCode() : null,
+            'response' => $response ? $this->getResponseContent($response) : null,
             'ip_address' => $this->getRealIpAddress($request),
             'duration' => $start ? floor((microtime(true) - $start) * 1000) : null,
         ];
+
+        // Attach exception data if available
+        $exception = ApexToolboxExceptionHandler::getForAttachment();
+        if ($exception) {
+            $data['exception'] = $exception;
+        }
+
+        return $data;
     }
 
     protected function getRealIpAddress(Request $request): string
@@ -155,10 +168,18 @@ class LoggerMiddleware
         return $filtered;
     }
 
-    protected function getResponseContent($response): array|string|null
+    protected function getResponseContent($response): array|string|int|float|bool|null
     {
         if ($response instanceof JsonResponse) {
             return $this->filterResponse($response->getData(true));
+            $data = $response->getData(true);
+            
+            // Only filter if data is an array, otherwise return as-is
+            if (is_array($data)) {
+                return $this->filterResponse($data);
+            }
+            
+            return $data;
         }
 
         if ($response instanceof Response) {
@@ -192,6 +213,7 @@ class LoggerMiddleware
                     'duration' => $data['duration'],
                     'logs_trace_id' => Str::uuid7()->toString(),
                     'logs' => LogBuffer::flush(LogBuffer::HTTP_CATEGORY),
+                    'exception' => $data['exception'] ?? null,
                 ]);
         } catch (Throwable $e) {
             // Silently fail
@@ -209,10 +231,15 @@ class LoggerMiddleware
         return 'https://apextoolbox.com/api/v1/logs';
     }
 
-    protected function recursivelyFilterSensitiveData(array $data, array $excludeFields, array $maskFields = [], string $maskValue = '*******'): array
+    protected function recursivelyFilterSensitiveData(
+        array $data,
+        array $excludeFields,
+        array $maskFields = [],
+        string $maskValue = '*******'
+    ): array
     {
         $filtered = [];
-        
+
         foreach ($data as $key => $value) {
             $keyLower = strtolower($key);
             
