@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-08-20
+
+### 🚀 Added
+- **Exception Handling**: Comprehensive exception capture and logging system
+  - New `ApexToolboxExceptionHandler` class for capturing exceptions across the application
+  - Automatic exception attachment to HTTP request logs when available
+  - Standalone exception sending for non-HTTP contexts (console commands, queue jobs, etc.)
+  - Exception grouping via SHA-256 hash generation for similar errors
+  - Source code context extraction (5 lines before, 10 lines after error line)
+  - Exception data includes: message, class, file path, line number, timestamp, and environment context
+  - Graceful shutdown handling ensures exceptions are sent even during application termination
+
+### 🔧 Enhanced
+- **Middleware Integration**: LoggerMiddleware now automatically includes exception data in HTTP logs
+  - Exceptions captured during request processing are included in the request log payload
+  - Prevents duplicate exception sending (either with request or standalone, never both)
+  - Clean exception state management with automatic cleanup
+- **JSON Response Handling**: Fixed handling of primitive JSON responses (integers, floats, strings)
+  - Previously caused TypeError when trying to filter non-array JSON responses
+  - Now properly handles mixed response types without filtering primitive values
+  - Maintains filtering for array responses while passing through primitives unchanged
+
+### 🛡️ Security & Reliability
+- **Exception Data Sanitization**: Sensitive data handling in exception context
+  - File paths are relative to project root to avoid exposing absolute paths
+  - Stack trace and detailed trace arrays are commented out by default to prevent information leakage
+  - Source context preserves whitespace using HTML entities for accurate display
+- **Error Resilience**: All exception handling operations include failsafe error handling
+  - Silent failure prevents infinite exception loops
+  - File reading errors in source context extraction are handled gracefully
+  - Network failures during exception sending don't affect application stability
+
+### 🧪 Testing
+- **Comprehensive Test Coverage**: All existing tests pass including new JSON response handling
+  - Added tests for primitive JSON response handling (integers, floats, strings)
+  - Mixed response type validation
+  - Array filtering vs primitive pass-through behavior
+  - 52 total tests with 153 assertions all passing
+
+### ⚙️ Technical Implementation
+- **Static Exception Storage**: Thread-safe exception capture using static properties
+- **Shutdown Function Registration**: Automatic registration of shutdown handlers for exception cleanup
+- **UUID v7 Integration**: Uses Laravel's UUID v7 for trace ID generation
+- **HTTP Timeout Configuration**: 2-second timeout for exception sending to prevent blocking
+- **Environment Detection**: Supports custom endpoints via `APEX_TOOLBOX_DEV_ENDPOINT`
+
+### 📋 Usage
+Exception handling is automatic - no configuration required. Exceptions are automatically captured and sent to ApexToolbox for monitoring and analysis.
+
+### 🔄 Migration
+No migration required - this release is fully backward compatible. Exception handling is automatically enabled when the package is active.
+
 ## [2.1.0] - 2025-01-15
 
 ### 🚀 Added

@@ -171,7 +171,6 @@ class LoggerMiddleware
     protected function getResponseContent($response): array|string|int|float|bool|null
     {
         if ($response instanceof JsonResponse) {
-            return $this->filterResponse($response->getData(true));
             $data = $response->getData(true);
             
             // Only filter if data is an array, otherwise return as-is
@@ -227,7 +226,6 @@ class LoggerMiddleware
             return env('APEX_TOOLBOX_DEV_ENDPOINT');
         }
 
-        // Production endpoint - hardcoded (used by all users, including their local dev)
         return 'https://apextoolbox.com/api/v1/logs';
     }
 
