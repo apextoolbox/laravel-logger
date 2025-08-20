@@ -653,6 +653,121 @@ class LoggerMiddlewareTest extends TestCase
         $this->assertEquals('*******', $filtered['user']['address']);
     }
 
+    public function test_get_response_content_handles_non_array_json_response()
+    {
+        // Test integer response
+        $response = new JsonResponse(123);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertEquals(123, $content);
+        
+        // Test string response
+        $response = new JsonResponse('hello world');
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertEquals('hello world', $content);
+        
+        // Test boolean response
+        $response = new JsonResponse(true);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertTrue($content);
+        
+        // Test null response (JsonResponse converts null to empty array)
+        $response = new JsonResponse(null);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertEquals([], $content);
+    }
+
+    public function test_get_response_content_filters_array_json_response_but_not_primitives()
+    {
+        Config::set('logger.response.exclude', ['password']);
+        
+        // Array response should be filtered
+        $arrayData = ['user' => 'John', 'password' => 'secret'];
+        $response = new JsonResponse($arrayData);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        
+        $this->assertIsArray($content);
+        $this->assertEquals('John', $content['user']);
+        $this->assertArrayNotHasKey('password', $content);
+        
+        // Primitive responses should pass through unchanged
+        $response = new JsonResponse(42);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertEquals(42, $content);
+    }
+
+    public function test_get_response_content_handles_mixed_response_types()
+    {
+        // Test float
+        $response = new JsonResponse(3.14);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertEquals(3.14, $content);
+        
+        // Test empty array (should still be filtered)
+        $response = new JsonResponse([]);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertIsArray($content);
+        $this->assertEmpty($content);
+        
+        // Test array with numeric keys
+        $response = new JsonResponse([1, 2, 3]);
+        $content = $this->invokePrivateMethod('getResponseContent', [$response]);
+        $this->assertIsArray($content);
+        $this->assertEquals([1, 2, 3], $content);
+    }
+
+    public function test_middleware_attaches_exception_data_when_available()
+    {
+        // Simulate an exception being captured
+        $exception = new \Exception('Test exception', 500);
+        \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::capture($exception);
+        
+        $request = Request::create('/api/test', 'GET');
+        $response = new Response('test response');
+        
+        $data = $this->invokePrivateMethod('prepareTrackingData', [$request, $response]);
+        
+        $this->assertArrayHasKey('exception', $data);
+        $this->assertEquals('Exception', $data['exception']['class']);
+        $this->assertEquals('Test exception', $data['exception']['message']);
+        $this->assertEquals(500, $data['exception']['code']);
+        $this->assertArrayHasKey('hash', $data['exception']);
+        $this->assertArrayHasKey('timestamp', $data['exception']);
+        
+        // Clean up
+        \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::clear();
+    }
+
+    public function test_middleware_does_not_include_exception_when_none_available()
+    {
+        // Ensure no exception is captured
+        \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::clear();
+        
+        $request = Request::create('/api/test', 'GET');
+        $response = new Response('test response');
+        
+        $data = $this->invokePrivateMethod('prepareTrackingData', [$request, $response]);
+        
+        $this->assertArrayNotHasKey('exception', $data);
+    }
+
+    public function test_middleware_handles_null_response_with_exception()
+    {
+        $exception = new \RuntimeException('Runtime error');
+        \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::capture($exception);
+        
+        $request = Request::create('/api/test', 'POST');
+        
+        $data = $this->invokePrivateMethod('prepareTrackingData', [$request, null]);
+        
+        $this->assertNull($data['status']);
+        $this->assertNull($data['response']);
+        $this->assertArrayHasKey('exception', $data);
+        $this->assertEquals('RuntimeException', $data['exception']['class']);
+        
+        // Clean up
+        \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::clear();
+    }
+
     private function invokePrivateMethod(string $methodName, array $parameters = [], $object = null)
     {
         $target = $object ?: $this->middleware;
