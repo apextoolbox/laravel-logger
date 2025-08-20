@@ -5,12 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<<<<<<< HEAD
-## [2.1.0] - 2025-01-16
-
-### Fixed
-- Add Silently fail to middleware to prevent exceptions from breaking the request lifecycle
-=======
 ## [2.2.0] - 2025-08-20
 
 ### 🚀 Added
@@ -62,7 +56,11 @@ Exception handling is automatic - no configuration required. Exceptions are auto
 
 ### 🔄 Migration
 No migration required - this release is fully backward compatible. Exception handling is automatically enabled when the package is active.
->>>>>>> e3ba2d31823ec6c7cec133df10364964dc89f2a8
+
+## [2.1.1] - 2025-01-16
+
+### Fixed
+- Add Silently fail to middleware to prevent exceptions from breaking the request lifecycle
 
 ## [2.1.0] - 2025-01-15
 
