@@ -23,6 +23,14 @@ class ApexToolboxExceptionHandler
             return;
         }
 
+        // Check if Laravel's exception handler says this should be reported
+        if (app()->bound('Illuminate\Contracts\Debug\ExceptionHandler')) {
+            $handler = app('Illuminate\Contracts\Debug\ExceptionHandler');
+            if (method_exists($handler, 'shouldReport') && !$handler->shouldReport($exception)) {
+                return;
+            }
+        }
+
         static::$currentException = $exception;
         static::$sentWithRequest = false;
 

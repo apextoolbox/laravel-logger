@@ -6,6 +6,9 @@ use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
 use ApexToolbox\Logger\LogBuffer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Auth\AuthenticationException;
 use Exception;
 use RuntimeException;
 use InvalidArgumentException;
@@ -538,5 +541,90 @@ class ApexToolboxExceptionHandlerTest extends TestCase
                 $this->assertStringStartsNotWith(base_path(), $frame['file']);
             }
         }
+    }
+
+    public function test_capture_respects_laravel_should_report_method()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        // Create a mock exception handler that returns false for shouldReport
+        $mockHandler = $this->createMock(ExceptionHandler::class);
+        $mockHandler->method('shouldReport')->willReturn(false);
+
+        // Bind the mock handler to the container
+        $this->app->instance(ExceptionHandler::class, $mockHandler);
+
+        $validator = $this->app['validator']->make([], ['required_field' => 'required']);
+        $exception = new ValidationException($validator);
+        ApexToolboxExceptionHandler::capture($exception);
+
+        $data = ApexToolboxExceptionHandler::getForAttachment();
+        
+        // Should be null because shouldReport returned false
+        $this->assertNull($data);
+    }
+
+    public function test_capture_allows_exceptions_when_should_report_returns_true()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        // Create a mock exception handler that returns true for shouldReport
+        $mockHandler = $this->createMock(ExceptionHandler::class);
+        $mockHandler->method('shouldReport')->willReturn(true);
+
+        // Bind the mock handler to the container
+        $this->app->instance(ExceptionHandler::class, $mockHandler);
+
+        $exception = new Exception('Regular exception');
+        ApexToolboxExceptionHandler::capture($exception);
+
+        $data = ApexToolboxExceptionHandler::getForAttachment();
+        
+        // Should capture the exception because shouldReport returned true
+        $this->assertNotNull($data);
+        $this->assertEquals('Regular exception', $data['message']);
+    }
+
+    public function test_capture_works_when_no_exception_handler_bound()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        // Ensure no exception handler is bound
+        $this->app->forgetInstance(ExceptionHandler::class);
+
+        $exception = new Exception('Test exception');
+        ApexToolboxExceptionHandler::capture($exception);
+
+        $data = ApexToolboxExceptionHandler::getForAttachment();
+        
+        // Should still capture when no handler is bound
+        $this->assertNotNull($data);
+        $this->assertEquals('Test exception', $data['message']);
+    }
+
+    public function test_capture_works_when_handler_lacks_should_report_method()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        // Create a mock handler without shouldReport method
+        $mockHandler = new class {
+            // No shouldReport method
+        };
+
+        // Bind the mock handler to the container
+        $this->app->instance(ExceptionHandler::class, $mockHandler);
+
+        $exception = new Exception('Test exception');
+        ApexToolboxExceptionHandler::capture($exception);
+
+        $data = ApexToolboxExceptionHandler::getForAttachment();
+        
+        // Should still capture when handler lacks shouldReport method
+        $this->assertNotNull($data);
+        $this->assertEquals('Test exception', $data['message']);
     }
 }

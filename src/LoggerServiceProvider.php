@@ -16,6 +16,16 @@ class LoggerServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/config/logger.php', 'logger');
+
+        $this->app->extend(ExceptionHandler::class, function ($handler, $app) {
+            $handler->reportable(function (Throwable $exception) use ($handler) {
+                if ($handler->shouldReport($exception)) {
+                    ApexToolboxExceptionHandler::capture($exception);
+                }
+            });
+
+            return $handler;
+        });
     }
 
     public function boot(): void
@@ -28,13 +38,27 @@ class LoggerServiceProvider extends ServiceProvider
             ApexToolboxLogHandler::flushBuffer();
         });
 
-        // Register exception handler using Laravel's Handler interface
-        $this->app->extend(ExceptionHandler::class, function ($handler, $app) {
-            $handler->reportable(function (Throwable $exception) {
-                ApexToolboxExceptionHandler::capture($exception);
-            });
+        set_exception_handler(function (Throwable $exception) {
+            ApexToolboxExceptionHandler::capture($exception);
+            report($exception);
+        });
+
+        register_shutdown_function(function () {
+            ApexToolboxLogHandler::flushBuffer();
             
-            return $handler;
+            $error = error_get_last();
+
+            if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+                $exception = new \ErrorException(
+                    $error['message'],
+                    0,
+                    $error['type'],
+                    $error['file'],
+                    $error['line']
+                );
+
+                ApexToolboxExceptionHandler::capture($exception);
+            }
         });
 
         $this->publishes([

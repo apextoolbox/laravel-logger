@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.1] - 2025-08-26]
+## [2.4.0] - 2025-08-26
+
+### Added
+- Exception filtering that respects Laravel's `$dontReport` and `shouldReport()` methods
+- Buffer flushing on application shutdown
+
+### Fixed
+- Potential double reporting of exceptions
+- Missing buffer flush in shutdown scenarios
+
+### Enhanced
+- Exception handler now follows Laravel conventions
+- Added comprehensive test coverage for new functionality
+
+## [2.3.1] - 2025-08-26
 
 ### 🔧 Enhanced
 - **Exception Handler**: Improved stack trace formatting and code context extraction
