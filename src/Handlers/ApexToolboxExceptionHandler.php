@@ -123,14 +123,19 @@ class ApexToolboxExceptionHandler
         $lines = file($file, FILE_IGNORE_NEW_LINES);
         if (!$lines) return null;
 
-        $startLine = max(1, $line - 3);
-        $endLine = min(count($lines), $line + 3);
+        $startLine = max(1, $line - 10);
+        $endLine = min(count($lines), $line + 5);
 
         $context = [];
         for ($i = $startLine; $i <= $endLine; $i++) {
+            $code = $lines[$i - 1] ?? '';
+
+            // Preserve whitespace by converting to HTML entities
+            $code = str_replace(["\t", " "], ["&#9;", "&#32;"], $code);
+
             $context[] = [
                 'line_number' => $i,
-                'code' => $lines[$i - 1] ?? '',
+                'code' => $code,
                 'is_error_line' => $i === $line,
             ];
         }
