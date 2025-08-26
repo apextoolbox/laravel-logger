@@ -67,76 +67,79 @@ class ApexToolboxExceptionHandler
             'line_number' => $exception->getLine(),
 
             'code' => $exception->getCode(),
-            'source_context' => static::extractSourceContext($exception->getFile(), $exception->getLine()),
-            // 'stack_trace' => $exception->getTraceAsString(),
-            // 'trace_array' => static::sanitizeTrace($exception->getTrace()),
+            'stack_trace' => static::prepareStackTrace($exception->getTrace()),
             'timestamp' => now()->toISOString(),
 
             'context' => [
                 'environment' => app()->environment(),
-                // 'php_version' => PHP_VERSION,
-                // 'laravel_version' => app()->version(),
+                'php_version' => PHP_VERSION,
+                'laravel_version' => app()->version(),
             ],
         ];
     }
 
     /**
-     * Extract source code context around the error line
+     * Prepare stack trace with code context for each frame
      */
-    protected static function extractSourceContext(string $file, int $line): ?array
+    protected static function prepareStackTrace(array $trace): array
     {
-        try {
-            if (!file_exists($file) || !is_readable($file)) {
-                return null;
-            }
+        $basePath = base_path();
+        $vendorPath = base_path('vendor');
+        $frames = [];
 
-            $lines = file($file, FILE_IGNORE_NEW_LINES);
-            if (!$lines) {
-                return null;
-            }
+        foreach ($trace as $entry) {
+            if (!isset($entry['file'])) continue;
 
-            $totalLines = count($lines);
+            // Remove args to avoid sensitive data
+            unset($entry['args']);
 
-            $startLine = max(1, $line - 5);
-            $endLine = min($totalLines, $line + 10);
+            $isAppCode = str_starts_with($entry['file'], $basePath)
+                && !str_starts_with($entry['file'], $vendorPath);
 
-            $context = [];
-            for ($i = $startLine; $i <= $endLine; $i++) {
-                $code = $lines[$i - 1] ?? ''; // Array is 0-indexed
-                
-                // Preserve whitespace by converting to HTML entities
-                $code = str_replace(["\t", " "], ["&#9;", "&#32;"], $code);
-                
-                $context[] = [
-                    'line_number' => $i,
-                    'code' => $code,
-                    'is_error_line' => $i === $line,
-                ];
-            }
-
-            return [
-                'file' => str_replace(base_path() . DIRECTORY_SEPARATOR, '', $file),
-                'error_line' => $line,
-                'context_start' => $startLine,
-                'context_end' => $endLine,
-                'lines' => $context,
+            $frame = [
+                'file' => str_replace($basePath . DIRECTORY_SEPARATOR, '', $entry['file']),
+                'line' => $entry['line'] ?? 0,
+                'function' => $entry['function'] ?? '',
+                'class' => $entry['class'] ?? '',
+                'in_app' => $isAppCode,
+                'code_context' => static::extractCodeContext($entry['file'], $entry['line'] ?? 0)
             ];
-        } catch (\Throwable $e) {
-            // If we can't read the source, return null
-            return null;
+
+            $frames[] = $frame;
         }
+
+        return $frames;
     }
 
     /**
-     * Sanitize stack trace to remove sensitive data and limit size
+     * Extract code context around a specific line
      */
-    protected static function sanitizeTrace(array $trace): array
+    protected static function extractCodeContext(string $file, int $line): ?array
     {
-        return array_map(function ($frame) {
-            // Remove 'args' to avoid sensitive data and reduce payload size
-            unset($frame['args']);
-            return $frame;
-        }, array_slice($trace, 0, 20)); // Limit to first 20 frames
+        if (!file_exists($file) || !is_readable($file)) {
+            return null;
+        }
+
+        $lines = file($file, FILE_IGNORE_NEW_LINES);
+        if (!$lines) return null;
+
+        $startLine = max(1, $line - 3);
+        $endLine = min(count($lines), $line + 3);
+
+        $context = [];
+        for ($i = $startLine; $i <= $endLine; $i++) {
+            $context[] = [
+                'line_number' => $i,
+                'code' => $lines[$i - 1] ?? '',
+                'is_error_line' => $i === $line,
+            ];
+        }
+
+        return [
+            'lines' => $context,
+            'context_start' => $startLine,
+            'context_end' => $endLine
+        ];
     }
 
     /**
@@ -190,7 +193,7 @@ class ApexToolboxExceptionHandler
                 ->timeout(2)
                 ->post($url, $data);
 
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Silently fail to prevent infinite loops
         }
     }

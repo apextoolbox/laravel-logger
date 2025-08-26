@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-08-26
+
+### 🔧 Enhanced
+- **Exception Handler Improvements**: Comprehensive enhancements to `ApexToolboxExceptionHandler`
+  - Enhanced stack trace preparation with improved code context extraction
+  - Better app code identification logic for distinguishing application vs vendor code
+  - Improved exception parsing with comprehensive context information
+  - Enhanced standalone exception sending functionality
+  - Better error handling and failsafe mechanisms
+
+### 🧪 Testing
+- **New Comprehensive Test Suite**: Added dedicated `ApexToolboxExceptionHandlerTest` with 20+ tests
+  - Complete coverage of exception capture, storage, and retrieval functionality
+  - Configuration handling tests (enabled/disabled states, token validation)
+  - Exception parsing tests with full data structure validation
+  - Stack trace preparation and app code identification tests
+  - Standalone sending functionality with HTTP mocking
+  - Exception hashing and deduplication logic tests
+  - Enhanced error handling and edge case coverage
+- **Updated Integration Tests**: Enhanced existing middleware tests for better exception handling validation
+  - Updated `LoggerMiddlewareTest` with improved exception attachment validation
+  - Enhanced test coverage for exception data structure validation
+  - Better configuration setup and cleanup in tests
+
+### 🛡️ Security & Reliability
+- **Improved Path Handling**: Better handling of absolute vs relative file paths in stack traces
+- **Enhanced Error Recovery**: More robust error handling in exception processing
+- **Test Environment Compatibility**: Improved test reliability across different environments
+
+### ⚙️ Technical Implementation  
+- **Code Context Extraction**: Enhanced logic for extracting source code context around exceptions
+- **Stack Trace Processing**: Improved algorithm for processing and cleaning stack trace data
+- **App Code Detection**: Better logic for identifying application code vs vendor/framework code
+- **Test Infrastructure**: Comprehensive test helpers and utilities for exception testing
+
+### 🔄 Migration
+No migration required - this release is fully backward compatible. All exception handling improvements are internal enhancements.
+
 ## [2.2.0] - 2025-08-20
 
 ### 🚀 Added

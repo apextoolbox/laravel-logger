@@ -717,6 +717,9 @@ class LoggerMiddlewareTest extends TestCase
 
     public function test_middleware_attaches_exception_data_when_available()
     {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+        
         // Simulate an exception being captured
         $exception = new \Exception('Test exception', 500);
         \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::capture($exception);
@@ -732,6 +735,28 @@ class LoggerMiddlewareTest extends TestCase
         $this->assertEquals(500, $data['exception']['code']);
         $this->assertArrayHasKey('hash', $data['exception']);
         $this->assertArrayHasKey('timestamp', $data['exception']);
+        $this->assertArrayHasKey('file_path', $data['exception']);
+        $this->assertArrayHasKey('line_number', $data['exception']);
+        $this->assertArrayHasKey('stack_trace', $data['exception']);
+        $this->assertArrayHasKey('context', $data['exception']);
+        
+        // Verify stack trace structure
+        $this->assertIsArray($data['exception']['stack_trace']);
+        if (!empty($data['exception']['stack_trace'])) {
+            $frame = $data['exception']['stack_trace'][0];
+            $this->assertArrayHasKey('file', $frame);
+            $this->assertArrayHasKey('line', $frame);
+            $this->assertArrayHasKey('function', $frame);
+            $this->assertArrayHasKey('class', $frame);
+            $this->assertArrayHasKey('in_app', $frame);
+            $this->assertArrayHasKey('code_context', $frame);
+        }
+        
+        // Verify context structure
+        $this->assertIsArray($data['exception']['context']);
+        $this->assertArrayHasKey('environment', $data['exception']['context']);
+        $this->assertArrayHasKey('php_version', $data['exception']['context']);
+        $this->assertArrayHasKey('laravel_version', $data['exception']['context']);
         
         // Clean up
         \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::clear();
@@ -752,6 +777,9 @@ class LoggerMiddlewareTest extends TestCase
 
     public function test_middleware_handles_null_response_with_exception()
     {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+        
         $exception = new \RuntimeException('Runtime error');
         \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::capture($exception);
         
@@ -763,6 +791,10 @@ class LoggerMiddlewareTest extends TestCase
         $this->assertNull($data['response']);
         $this->assertArrayHasKey('exception', $data);
         $this->assertEquals('RuntimeException', $data['exception']['class']);
+        $this->assertEquals('Runtime error', $data['exception']['message']);
+        $this->assertArrayHasKey('hash', $data['exception']);
+        $this->assertArrayHasKey('stack_trace', $data['exception']);
+        $this->assertArrayHasKey('context', $data['exception']);
         
         // Clean up
         \ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler::clear();
