@@ -2,7 +2,6 @@
 
 namespace ApexToolbox\Logger;
 
-use ApexToolbox\Logger\Handlers\ApexToolboxLogHandler;
 use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\ServiceProvider;
@@ -30,22 +29,26 @@ class LoggerServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Send logs for console commands and queue jobs
         Event::listen(JobAttempted::class, function () {
-            ApexToolboxLogHandler::flushBuffer();
+            PayloadCollector::send();
         });
 
         Event::listen(CommandFinished::class, function () {
-            ApexToolboxLogHandler::flushBuffer();
+            PayloadCollector::send();
         });
 
+        // Handle exceptions that occur outside of HTTP requests (CLI, queue, etc.)
         set_exception_handler(function (Throwable $exception) {
             ApexToolboxExceptionHandler::capture($exception);
+            PayloadCollector::send(); // Send immediately for non-HTTP contexts
             report($exception);
         });
 
+        // Handle fatal errors
         register_shutdown_function(function () {
-            ApexToolboxLogHandler::flushBuffer();
-            
+            PayloadCollector::send();
+
             $error = error_get_last();
 
             if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
@@ -58,6 +61,7 @@ class LoggerServiceProvider extends ServiceProvider
                 );
 
                 ApexToolboxExceptionHandler::capture($exception);
+                PayloadCollector::send(); // Send immediately for fatal errors
             }
         });
 

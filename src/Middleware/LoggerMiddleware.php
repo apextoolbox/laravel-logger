@@ -1,35 +1,50 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ApexToolbox\Logger\Middleware;
 
-use ApexToolbox\Logger\LogBuffer;
-use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
-use Closure;
+use ApexToolbox\Logger\PayloadCollector;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Response;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
+use Closure;
 
 class LoggerMiddleware
 {
+    private ?float $startTime = null;
+
     public function handle(Request $request, Closure $next)
     {
-        $response = $next($request);
+        PayloadCollector::clear();
 
+        $this->startTime = defined('LARAVEL_START')
+            ? LARAVEL_START
+            : ($request->server('REQUEST_TIME_FLOAT') ?: microtime(true));
+
+        return $next($request);
+    }
+
+    public function terminate(Request $request, Response $response): void
+    {
         try {
             if ($this->shouldTrack($request)) {
-                $data = $this->prepareTrackingData($request, $response);
-                $this->sendSyncRequest($data);
+                $endTime = microtime(true);
+                
+                // Use captured startTime, fallback to request time if not available
+                $startTime = $this->startTime ?? (
+                    defined('LARAVEL_START')
+                        ? LARAVEL_START
+                        : ($request->server('REQUEST_TIME_FLOAT') ?: $endTime)
+                );
+
+                PayloadCollector::collect($request, $response, $startTime, $endTime);
+                PayloadCollector::send();
             }
         } catch (Throwable $e) {
             // Silently fail
         }
-
-        return $response;
     }
 
     protected function shouldTrack(Request $request): bool
@@ -72,194 +87,5 @@ class LoggerMiddleware
         
         // Use fnmatch for pattern matching
         return fnmatch($pattern, $path);
-    }
-
-    protected function prepareTrackingData(Request $request, $response): array
-    {
-        $start = defined('LARAVEL_START') ? LARAVEL_START : $request->server('REQUEST_TIME_FLOAT');
-
-        $data = [
-            'method' => $request->method(),
-            'url' => $request->fullUrl(),
-            'headers' => $this->filterHeaders($request->headers->all()),
-            'body' => $this->filterBody($request->all()),
-            'status' => $response ? $response->getStatusCode() : null,
-            'response' => $response ? $this->getResponseContent($response) : null,
-            'ip_address' => $this->getRealIpAddress($request),
-            'duration' => $start ? floor((microtime(true) - $start) * 1000) : null,
-        ];
-
-        // Attach exception data if available
-        $exception = ApexToolboxExceptionHandler::getForAttachment();
-        if ($exception) {
-            $data['exception'] = $exception;
-        }
-
-        return $data;
-    }
-
-    protected function getRealIpAddress(Request $request): string
-    {
-        $headers = [
-            'CF-Connecting-IP',     // Cloudflare
-            'X-Forwarded-For',      // Standard proxy header
-            'X-Real-IP',            // Nginx proxy
-            'X-Client-IP',          // Apache mod_proxy
-            'HTTP_X_FORWARDED_FOR', // Alternative format
-            'HTTP_X_REAL_IP',       // Alternative format
-            'HTTP_CF_CONNECTING_IP', // Alternative Cloudflare format
-        ];
-
-        foreach ($headers as $header) {
-            $value = $request->header($header) ?? $_SERVER[$header] ?? null;
-            
-            if ($value) {
-                // Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs)
-                $ips = explode(',', $value);
-                $ip = trim($ips[0]);
-                
-                // Validate IP address
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    return $ip;
-                }
-            }
-        }
-
-        // Fallback to request IP
-        return $request->ip() ?? '127.0.0.1';
-    }
-
-    protected function filterHeaders(array $headers): array
-    {
-        $excludeHeaders = Config::get('logger.headers.exclude', []);
-
-        return Arr::except($headers, $excludeHeaders);
-    }
-
-    protected function filterBody(array $body): array
-    {
-        $excludeFields = Config::get('logger.body.exclude', []);
-        $maskFields = Config::get('logger.body.mask', []);
-        $filtered = $this->recursivelyFilterSensitiveData($body, $excludeFields, $maskFields);
-        
-        $maxSize = Config::get('logger.body.max_size', 10240);
-        $serialized = json_encode($filtered);
-        
-        if (strlen($serialized) > $maxSize) {
-            return ['_truncated' => 'Body too large, truncated'];
-        }
-        
-        return $filtered;
-    }
-
-    protected function filterResponse(array $response): array
-    {
-        $excludeFields = Config::get('logger.response.exclude', []);
-        $maskFields = Config::get('logger.response.mask', []);
-        $filtered = $this->recursivelyFilterSensitiveData($response, $excludeFields, $maskFields);
-
-        $maxSize = Config::get('logger.response.max_size', 10240);
-        $serialized = json_encode($filtered);
-
-        if (strlen($serialized) > $maxSize) {
-            return ['_truncated' => 'Response too large, truncated'];
-        }
-
-        return $filtered;
-    }
-
-    protected function getResponseContent($response): array|string|int|float|bool|null
-    {
-        if ($response instanceof JsonResponse) {
-            $data = $response->getData(true);
-            
-            // Only filter if data is an array, otherwise return as-is
-            if (is_array($data)) {
-                return $this->filterResponse($data);
-            }
-            
-            return $data;
-        }
-
-        if ($response instanceof Response) {
-            $content = $response->getContent();
-            $maxSize = Config::get('logger.body.max_size', 10240);
-            
-            if (strlen($content) > $maxSize) {
-                return substr($content, 0, $maxSize) . '... [truncated]';
-            }
-            
-            return $content;
-        }
-
-        return null;
-    }
-
-    protected function sendSyncRequest(array $data): void
-    {
-        try {
-            $url = $this->getEndpointUrl();
-
-            Http::withHeaders(['Authorization' => 'Bearer ' . Config::get('logger.token')])
-                ->post($url, [
-                    'method' => $data['method'],
-                    'uri' => $data['url'],
-                    'headers' => $data['headers'],
-                    'payload' => $data['body'],
-                    'status_code' => $data['status'],
-                    'response' => $data['response'],
-                    'ip_address' => $data['ip_address'],
-                    'duration' => $data['duration'],
-                    'logs_trace_id' => Str::uuid7()->toString(),
-                    'logs' => LogBuffer::flush(LogBuffer::HTTP_CATEGORY),
-                    'exception' => $data['exception'] ?? null,
-                ]);
-        } catch (Throwable $e) {
-            // Silently fail
-        }
-    }
-
-    protected function getEndpointUrl(): string
-    {
-        // Only override endpoint if explicitly set for ApexToolbox package development
-        if (env('APEX_TOOLBOX_DEV_ENDPOINT')) {
-            return env('APEX_TOOLBOX_DEV_ENDPOINT');
-        }
-
-        return 'https://apextoolbox.com/api/v1/logs';
-    }
-
-    protected function recursivelyFilterSensitiveData(
-        array $data,
-        array $excludeFields,
-        array $maskFields = [],
-        string $maskValue = '*******'
-    ): array
-    {
-        $filtered = [];
-
-        foreach ($data as $key => $value) {
-            $keyLower = strtolower($key);
-            
-            // Skip if key is in exclude list (case-insensitive)
-            if (in_array($keyLower, array_map('strtolower', $excludeFields))) {
-                continue;
-            }
-            
-            // Mask if key is in mask list (case-insensitive)
-            if (in_array($keyLower, array_map('strtolower', $maskFields))) {
-                $filtered[$key] = $maskValue;
-                continue;
-            }
-            
-            // Recursively filter nested arrays
-            if (is_array($value)) {
-                $filtered[$key] = $this->recursivelyFilterSensitiveData($value, $excludeFields, $maskFields, $maskValue);
-            } else {
-                $filtered[$key] = $value;
-            }
-        }
-        
-        return $filtered;
     }
 }

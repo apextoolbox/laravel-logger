@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2025-08-27
+
+### Fixed
+- Fixed middleware startTime initialization issue preventing terminate() method from working properly
+- Fixed response type compatibility by using Symfony\Component\HttpFoundation\Response for better Laravel compatibility
+- Improved exception stack trace to include the actual throwing location as first frame
+- Fixed timing calculation discrepancies and improved precision using round() instead of floor()
+
+### Enhanced  
+- Enhanced exception handling to show exact exception source in stack trace for better debugging
+- Improved middleware timing accuracy to align better with tools like Laravel Telescope
+- Updated middleware to use proper response type hints for Laravel 10-12 compatibility
+
 ## [2.4.0] - 2025-08-26
 
 ### Added

@@ -3,6 +3,7 @@
 namespace ApexToolbox\Logger\Tests;
 
 use ApexToolbox\Logger\LoggerServiceProvider;
+use ApexToolbox\Logger\PayloadCollector;
 use ApexToolbox\Logger\Handlers\ApexToolboxExceptionHandler;
 use ApexToolbox\Logger\Handlers\ApexToolboxLogHandler;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -19,12 +20,12 @@ class LoggerServiceProviderTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        ApexToolboxExceptionHandler::clear();
+        PayloadCollector::clear();
     }
 
     protected function tearDown(): void
     {
-        ApexToolboxExceptionHandler::clear();
+        PayloadCollector::clear();
         parent::tearDown();
     }
 
