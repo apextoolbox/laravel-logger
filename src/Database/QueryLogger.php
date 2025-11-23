@@ -99,7 +99,7 @@ class QueryLogger
 
     private function findCaller(): array
     {
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 20);
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 50);
         $basePath = base_path();
 
         foreach ($trace as $frame) {
@@ -107,15 +107,25 @@ class QueryLogger
                 continue;
             }
 
-            // Skip vendor, this class, and framework files
-            if (str_contains($frame['file'], '/vendor/') ||
-                str_contains($frame['file'], 'QueryLogger.php') ||
-                str_contains($frame['file'], 'PayloadCollector.php')) {
+            $file = $frame['file'];
+
+            // Skip vendor files
+            if (str_contains($file, '/vendor/')) {
+                continue;
+            }
+
+            // Skip laravel-logger package files
+            if (str_contains($file, 'laravel-logger/')) {
+                continue;
+            }
+
+            // Skip Laravel framework internals
+            if (str_contains($file, '/Illuminate/')) {
                 continue;
             }
 
             return [
-                'file' => str_replace($basePath . DIRECTORY_SEPARATOR, '', $frame['file']),
+                'file' => str_replace($basePath . DIRECTORY_SEPARATOR, '', $file),
                 'line' => $frame['line'] ?? 0,
             ];
         }
