@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ApexToolbox\Logger\Middleware;
 
+use ApexToolbox\Logger\Database\QueryLogger;
 use ApexToolbox\Logger\PayloadCollector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 use Closure;
@@ -18,6 +20,7 @@ class LoggerMiddleware
     public function handle(Request $request, Closure $next)
     {
         PayloadCollector::clear();
+        PayloadCollector::setRequestId(Str::uuid7()->toString());
 
         $this->startTime = defined('LARAVEL_START')
             ? LARAVEL_START
@@ -29,19 +32,26 @@ class LoggerMiddleware
     public function terminate(Request $request, Response $response): void
     {
         try {
-            if ($this->shouldTrack($request)) {
-                $endTime = microtime(true);
-                
-                // Use captured startTime, fallback to request time if not available
-                $startTime = $this->startTime ?? (
-                    defined('LARAVEL_START')
-                        ? LARAVEL_START
-                        : ($request->server('REQUEST_TIME_FLOAT') ?: $endTime)
-                );
-
-                PayloadCollector::collect($request, $response, $startTime, $endTime);
-                PayloadCollector::send();
+            if (!$this->shouldTrack($request)) {
+                return;
             }
+
+            $endTime = microtime(true);
+
+            $startTime = $this->startTime ?? (
+                defined('LARAVEL_START')
+                    ? LARAVEL_START
+                    : ($request->server('REQUEST_TIME_FLOAT') ?: $endTime)
+            );
+
+            // Flush response to client before sending telemetry
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+
+            app(QueryLogger::class)->detectN1Queries();
+            PayloadCollector::collect($request, $response, $startTime, $endTime);
+            PayloadCollector::send();
         } catch (Throwable $e) {
             // Silently fail
         }

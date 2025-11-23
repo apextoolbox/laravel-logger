@@ -131,38 +131,32 @@ class LoggerMiddlewareTest extends TestCase
     public function test_terminate_collects_and_sends_data_when_should_track()
     {
         Http::fake();
-        
+
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
         Config::set('logger.path_filters.include', ['api/*']);
-        
+
         $request = Request::create('/api/test', 'POST', ['key' => 'value']);
         $response = new Response('{"result": "success"}', 201);
-        
-        // Simulate middleware workflow
+
         $this->middleware->handle($request, function ($req) use ($response) {
             return $response;
         });
-        
-        // Terminate should collect and send data
+
         $this->middleware->terminate($request, $response);
-        
+
         Http::assertSent(function ($request) {
             $data = $request->data();
-            
-            // Should include request data
-            $this->assertEquals('POST', $data['method']);
-            $this->assertEquals('/api/test', $data['uri']);
-            $this->assertArrayHasKey('payload', $data);
-            
-            // Should include response data
-            $this->assertEquals(201, $data['status_code']);
-            $this->assertArrayHasKey('duration', $data);
-            
-            // Should include metadata
-            $this->assertArrayHasKey('timestamp', $data);
-            
-            return $request->url() === 'https://apextoolbox.com/api/v1/logs';
+
+            $this->assertArrayHasKey('trace_id', $data);
+            $this->assertArrayHasKey('request', $data);
+            $this->assertEquals('POST', $data['request']['method']);
+            $this->assertEquals('/api/test', $data['request']['uri']);
+            $this->assertArrayHasKey('payload', $data['request']);
+            $this->assertEquals(201, $data['request']['status_code']);
+            $this->assertArrayHasKey('duration', $data['request']);
+
+            return $request->url() === 'https://apextoolbox.com/api/v1/telemetry';
         });
     }
 

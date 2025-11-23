@@ -11,12 +11,23 @@ use Throwable;
 
 class PayloadCollector
 {
-    private static ?array $requestData = null;
-    private static ?array $responseData = null;
+    private static ?string $requestId = null;
+    private static ?array $incomingRequest = null;
     private static ?array $exceptionData = null;
     private static array $logs = [];
-    private static array $metadata = [];
+    private static array $queries = [];
+    private static array $outgoingRequests = [];
     private static bool $sent = false;
+
+    public static function setRequestId(string $requestId): void
+    {
+        static::$requestId = $requestId;
+    }
+
+    public static function getRequestId(): ?string
+    {
+        return static::$requestId;
+    }
 
     /**
      * Collect request and response data
@@ -29,23 +40,17 @@ class PayloadCollector
 
         $endTime = $endTime ?: microtime(true);
 
-        static::$requestData = [
+        static::$incomingRequest = [
             'method' => $request->method(),
             'uri' => $request->getRequestUri(),
             'headers' => static::filterHeaders($request->headers->all()),
             'payload' => static::filterBody($request->all()),
             'ip_address' => static::getRealIpAddress($request),
-        ];
-
-        static::$responseData = [
+            'user_agent' => $request->userAgent(),
             'status_code' => $response ? $response->getStatusCode() : null,
             'response' => $response ? static::getResponseContent($response) : null,
             'duration' => round(($endTime - $startTime) * 1000),
         ];
-
-        static::$metadata['start_time'] = $startTime;
-        static::$metadata['end_time'] = $endTime;
-        static::$metadata['timestamp'] = now()->toISOString();
     }
 
     /**
@@ -60,9 +65,29 @@ class PayloadCollector
         static::$logs[] = $logData;
     }
 
-    /**
-     * Set exception data
-     */
+    public static function addQuery(array $queryData): void
+    {
+        if (!static::isEnabled()) {
+            return;
+        }
+
+        static::$queries[] = $queryData;
+    }
+
+    public static function getQueries(): array
+    {
+        return static::$queries;
+    }
+
+    public static function addOutgoingRequest(array $requestData): void
+    {
+        if (!static::isEnabled()) {
+            return;
+        }
+
+        static::$outgoingRequests[] = $requestData;
+    }
+
     public static function setException(Throwable $exception): void
     {
         if (!static::isEnabled()) {
@@ -89,18 +114,16 @@ class PayloadCollector
             return;
         }
 
-        // Don't send if no meaningful data collected
-        if (!static::$requestData && !static::$exceptionData && empty(static::$logs)) {
+        if (!static::$incomingRequest && !static::$exceptionData && empty(static::$logs) && empty(static::$queries) && empty(static::$outgoingRequests)) {
             return;
         }
 
         try {
             $payload = static::buildPayload();
-
             static::sendPayload($payload);
             static::$sent = true;
         } catch (Throwable $e) {
-            // Silently fail to prevent infinite loops
+            // Silently fail to avoid disrupting the application
         }
     }
 
@@ -109,11 +132,12 @@ class PayloadCollector
      */
     public static function clear(): void
     {
-        static::$requestData = null;
-        static::$responseData = null;
+        static::$requestId = null;
+        static::$incomingRequest = null;
         static::$exceptionData = null;
         static::$logs = [];
-        static::$metadata = [];
+        static::$queries = [];
+        static::$outgoingRequests = [];
         static::$sent = false;
     }
 
@@ -125,34 +149,30 @@ class PayloadCollector
         return Config::get('logger.enabled', true) && Config::get('logger.token');
     }
 
-    /**
-     * Build unified payload
-     */
     private static function buildPayload(): array
     {
         $payload = [
-            'timestamp' => static::$metadata['timestamp'] ?? now()->toISOString(),
+            'trace_id' => Str::uuid7()->toString(),
         ];
 
-        // Only add logs if we have some
+        if (static::$incomingRequest) {
+            $payload['request'] = static::$incomingRequest;
+        }
+
         if (!empty(static::$logs)) {
-            $payload['logs_trace_id'] = Str::uuid7()->toString();
             $payload['logs'] = static::$logs;
         }
 
-        // Add request data if available
-        if (static::$requestData) {
-            $payload = array_merge($payload, static::$requestData);
-        }
-
-        // Add response data if available
-        if (static::$responseData) {
-            $payload = array_merge($payload, static::$responseData);
-        }
-
-        // Add exception data if available
         if (static::$exceptionData) {
             $payload['exception'] = static::$exceptionData;
+        }
+
+        if (!empty(static::$queries)) {
+            $payload['queries'] = static::$queries;
+        }
+
+        if (!empty(static::$outgoingRequests)) {
+            $payload['outgoing_requests'] = static::$outgoingRequests;
         }
 
         return $payload;
@@ -166,14 +186,15 @@ class PayloadCollector
         $url = static::getEndpointUrl();
 
         try {
-            Http::withHeaders([
+            $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . Config::get('logger.token'),
                 'Content-Type' => 'application/json',
             ])
-                ->timeout(2)
+                ->timeout(5)
                 ->post($url, $payload);
+
         } catch (Throwable $e) {
-            // ...
+            // Silently fail to avoid disrupting the application
         }
     }
 
@@ -182,11 +203,7 @@ class PayloadCollector
      */
     private static function getEndpointUrl(): string
     {
-        if (env('APEX_TOOLBOX_DEV_ENDPOINT')) {
-            return env('APEX_TOOLBOX_DEV_ENDPOINT');
-        }
-
-        return 'https://apextoolbox.com/api/v1/logs';
+        return env('APEX_TOOLBOX_DEV_ENDPOINT') ?: 'https://apextoolbox.com/api/v1/telemetry';
     }
 
     /**
@@ -196,7 +213,7 @@ class PayloadCollector
     {
         // Add the exception throwing location as the first frame
         $trace = $exception->getTrace();
-        
+
         // Get method info from the first trace frame (if available)
         $firstFrame = $trace[0] ?? [];
 

@@ -1,194 +1,92 @@
-# Official Apex Toolbox SDK for Laravel
+# Apex Toolbox for Laravel
 
-[![Tests](https://img.shields.io/badge/tests-44%20passed-brightgreen)](https://github.com/apextoolbox/laravel-logger)
 [![PHP Version](https://img.shields.io/badge/php-%3E%3D8.1-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/laravel-10.x%20%7C%2011.x%20%7C%2012.x-red)](https://laravel.com)
 
-This is the official Laravel SDK for [Apex Toolbox](https://apextoolbox.com/).
+Automatic error tracking, logging, and performance monitoring for Laravel applications.
 
 ## Installation
-
-Install the package:
 
 ```bash
 composer require apextoolbox/laravel-logger
 ```
 
-Add your token to `.env`:
+Add to `.env`:
 
 ```env
+APEX_TOOLBOX_ENABLED=true
 APEX_TOOLBOX_TOKEN=your_token_here
 ```
 
-Add to `config/logging.php`:
+Add the log channel to `config/logging.php`:
 
 ```php
 'channels' => [
+    // ... other channels
+    
     'apextoolbox' => [
         'driver' => 'monolog',
         'handler' => \ApexToolbox\Logger\Handlers\ApexToolboxLogHandler::class,
         'level' => 'debug',
     ],
-    'stack' => [
-        'driver' => 'stack',
-        'channels' => ['daily', 'apextoolbox'],
-    ],
 ],
 ```
 
-Set log channel in `.env`:
+Update `.env` to include the channel in your log stack:
 
 ```env
-LOG_CHANNEL=stack
+LOG_STACK=daily,apextoolbox
 ```
 
-## Usage
-
-All your existing logs are automatically sent to Apex Toolbox:
+Add the middleware for HTTP request tracking (optional):
 
 ```php
-Log::info('User created', ['user_id' => 123]);
-Log::error('Payment failed', ['order_id' => 456]);
-```
+// bootstrap/app.php (Laravel 11+)
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(\ApexToolbox\Logger\Middleware\LoggerMiddleware::class);
+})
 
-## Optional HTTP Request Tracking
-
-Add middleware for HTTP request tracking:
-
-```php
-// app/Http/Kernel.php
-protected $middlewareAliases = [
-    'track.request' => \ApexToolbox\Logger\Middleware\LoggerMiddleware::class,
+// Or app/Http/Kernel.php (Laravel 10)
+protected $middleware = [
+    \ApexToolbox\Logger\Middleware\LoggerMiddleware::class,
 ];
 ```
 
-```php
-// routes/api.php
-Route::middleware('track.request')->group(function () {
-    Route::apiResource('users', UserController::class);
-});
-```
+Done! The SDK automatically captures exceptions, logs, and database queries.
 
 ## Configuration
 
-Publish the configuration file:
+Publish the config file for customization:
 
 ```bash
-php artisan vendor:publish --provider="ApexToolbox\Logger\LoggerServiceProvider"
+php artisan vendor:publish --tag=logger-config
 ```
 
-### Path Filtering
+### Environment Variables
 
-Configure which routes to track:
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `APEX_TOOLBOX_TOKEN` | Your project token | Required |
+| `APEX_TOOLBOX_ENABLED` | Enable/disable tracking | `true` |
+
+### Path Filtering
 
 ```php
 // config/logger.php
 'path_filters' => [
-    'include' => [
-        'api/*',        // Track all API routes
-        // '*',         // Uncomment to track ALL routes
-    ],
-    'exclude' => [
-        'api/health',   // Skip health checks
-        'api/ping',     // Skip ping endpoints
-    ],
+    'include' => ['*'],
+    'exclude' => ['_debugbar/*', 'telescope/*', 'api/health'],
 ],
 ```
 
-### Security Configuration
+### Sensitive Data
 
-**⚠️ IMPORTANT SECURITY NOTICE**: This package automatically filters sensitive data from logs to protect your users' privacy. The default configuration excludes common sensitive fields from headers, request bodies, and responses.
+Sensitive fields like `password`, `token`, `authorization` are automatically excluded from logs.
 
-```php
-// config/logger.php
-'headers' => [
-    'exclude' => [
-        'authorization', 'x-api-key', 'cookie',
-        // ... more sensitive headers
-    ],
-],
+## Requirements
 
-'body' => [
-    'exclude' => [
-        'password', 'password_confirmation', 'token', 'secret',
-        'access_token', 'refresh_token', 'api_key', 'private_key',
-        // ... more sensitive fields that should be completely removed
-    ],
-    'mask' => [
-        'ssn', 'social_security', 'phone', 'email', 'address',
-        'postal_code', 'zip_code',
-        // ... fields that should be masked with '*******'
-    ],
-],
-
-'response' => [
-    'exclude' => [
-        'password', 'password_confirmation', 'token', 'secret',
-        'access_token', 'refresh_token', 'api_key', 'private_key',
-        // ... more sensitive fields that should be completely removed
-    ],
-    'mask' => [
-        'ssn', 'social_security', 'phone', 'email', 'address',
-        'postal_code', 'zip_code',
-        // ... fields that should be masked with '*******'
-    ],
-],
-```
-
-### Data Filtering Options
-
-You have two options for protecting sensitive data:
-
-**1. Exclude (Complete Removal)**
-- Fields listed in `exclude` arrays are completely removed from logs
-- Use for highly sensitive data like passwords, tokens, API keys
-- Data structure changes (field disappears entirely)
-
-**2. Mask (Value Replacement)**  
-- Fields listed in `mask` arrays are replaced with `'*******'`
-- Use for PII that you want to track structurally but hide values
-- Data structure preserved (field exists but value is masked)
-- Works recursively in nested objects/arrays
-- Case-insensitive matching (`SSN`, `ssn`, `Ssn` all match)
-
-**Example:**
-```php
-// Input data
-[
-    'user' => [
-        'name' => 'John Doe',
-        'password' => 'secret123',      // Will be excluded (removed)
-        'ssn' => '123-45-6789',        // Will be masked to '*******'
-        'profile' => [
-            'email' => 'john@test.com', // Will be masked to '*******'
-            'token' => 'bearer-xyz'     // Will be excluded (removed)
-        ]
-    ]
-]
-
-// Logged data
-[
-    'user' => [
-        'name' => 'John Doe',
-        'ssn' => '*******',
-        'profile' => [
-            'email' => '*******'
-        ]
-    ]
-]
-```
-
-### ⚠️ Security Disclaimer
-
-**YOU ARE RESPONSIBLE** for configuring the sensitive data filters appropriately for your application. While this package provides sensible defaults to protect common sensitive fields, **you must review and customize the exclude lists** to ensure all sensitive data specific to your application is properly filtered.
-
-**The package maintainers are NOT liable** for any sensitive data that may be logged if you:
-- Modify or remove the default security filters
-- Add custom sensitive fields without proper exclusion
-- Disable the filtering mechanisms
-- Misconfigure the security settings
-
-Always review your logs to ensure no sensitive data is being transmitted before deploying to production.
+- PHP 8.1+
+- Laravel 10.x, 11.x, or 12.x
 
 ## License
 

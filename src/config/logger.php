@@ -36,12 +36,14 @@ return [
     */
     'path_filters' => [
         'include' => [
-            'api/*',        // Log API routes
-            // '*',         // Uncomment to log ALL routes
+            '*',
         ],
         'exclude' => [
-            'api/health',   // Skip health checks
-            'api/ping',     // Skip ping endpoints
+            '_debugbar/*',
+            'telescope/*',
+            'horizon/*',
+            'api/health',
+            'api/ping',
         ],
     ],
 

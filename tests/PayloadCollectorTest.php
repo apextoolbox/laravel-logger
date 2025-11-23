@@ -148,24 +148,25 @@ class PayloadCollectorTest extends TestCase
         Http::assertSent(function ($request) {
             $data = $request->data();
 
-            // Should include request data
-            $this->assertEquals('POST', $data['method']);
-            $this->assertEquals('/api/test', $data['uri']);
-            $this->assertArrayHasKey('payload', $data);
+            // Should include trace_id at top level
+            $this->assertArrayHasKey('trace_id', $data);
 
-            // Should include response data
-            $this->assertEquals(201, $data['status_code']);
-            $this->assertArrayHasKey('response', $data);
-            $this->assertArrayHasKey('duration', $data);
+            // Should include request object with both request AND response data
+            $this->assertArrayHasKey('request', $data);
+            $this->assertEquals('POST', $data['request']['method']);
+            $this->assertEquals('/api/test', $data['request']['uri']);
+            $this->assertArrayHasKey('payload', $data['request']);
+
+            // Response data should be inside request object
+            $this->assertEquals(201, $data['request']['status_code']);
+            $this->assertArrayHasKey('response', $data['request']);
+            $this->assertArrayHasKey('duration', $data['request']);
 
             // Should include exception data
             $this->assertArrayHasKey('exception', $data);
             $this->assertEquals('Test exception', $data['exception']['message']);
 
-            // Should include metadata
-            $this->assertArrayHasKey('timestamp', $data);
-
-            return $request->url() === 'https://apextoolbox.com/api/v1/logs';
+            return $request->url() === 'https://apextoolbox.com/api/v1/telemetry';
         });
     }
 
@@ -342,7 +343,7 @@ class PayloadCollectorTest extends TestCase
 
         $request = Request::create('/api/test', 'GET');
         $response = new Response('test', 200);
-        
+
         $logData1 = ['level' => 'INFO', 'message' => 'First log'];
         $logData2 = ['level' => 'ERROR', 'message' => 'Error log'];
 
@@ -360,9 +361,10 @@ class PayloadCollectorTest extends TestCase
             $this->assertEquals($logData1, $data['logs'][0]);
             $this->assertEquals($logData2, $data['logs'][1]);
 
-            // Should also include request/response data
-            $this->assertArrayHasKey('method', $data);
-            $this->assertArrayHasKey('status_code', $data);
+            // Should also include request/response data inside request object
+            $this->assertArrayHasKey('request', $data);
+            $this->assertArrayHasKey('method', $data['request']);
+            $this->assertArrayHasKey('status_code', $data['request']);
 
             return true;
         });
@@ -398,18 +400,104 @@ class PayloadCollectorTest extends TestCase
         Http::assertSent(function ($request) {
             $data = $request->data();
 
+            // Should include trace_id (always present)
+            $this->assertArrayHasKey('trace_id', $data);
+
             // Should include logs
             $this->assertArrayHasKey('logs', $data);
             $this->assertCount(1, $data['logs']);
             $this->assertEquals('Standalone log', $data['logs'][0]['message']);
 
-            // Should include metadata
-            
-            $this->assertArrayHasKey('timestamp', $data);
+            // Should not include request object when no request/response data
+            $this->assertArrayNotHasKey('request', $data);
 
-            // Should not include request/response data
-            $this->assertArrayNotHasKey('method', $data);
-            $this->assertArrayNotHasKey('status_code', $data);
+            return true;
+        });
+    }
+
+    public function test_request_id_can_be_set_and_retrieved()
+    {
+        PayloadCollector::setRequestId('test-uuid-123');
+
+        $this->assertEquals('test-uuid-123', PayloadCollector::getRequestId());
+    }
+
+    public function test_clear_resets_request_id()
+    {
+        PayloadCollector::setRequestId('test-uuid-123');
+        PayloadCollector::clear();
+
+        $this->assertNull(PayloadCollector::getRequestId());
+    }
+
+    public function test_collect_captures_user_agent()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        $request = Request::create('/api/test', 'GET');
+        $request->headers->set('User-Agent', 'TestBrowser/1.0');
+        $response = new Response('test', 200);
+
+        PayloadCollector::collect($request, $response, microtime(true));
+
+        $reflection = new \ReflectionClass(PayloadCollector::class);
+        $requestDataProperty = $reflection->getProperty('requestData');
+        $requestDataProperty->setAccessible(true);
+        $requestData = $requestDataProperty->getValue();
+
+        $this->assertEquals('TestBrowser/1.0', $requestData['user_agent']);
+    }
+
+    public function test_add_query_stores_query_data()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        $queryData = [
+            'sql' => 'SELECT * FROM users WHERE id = ?',
+            'bindings' => [1],
+            'duration' => 2.5,
+        ];
+
+        PayloadCollector::addQuery($queryData);
+
+        $queries = PayloadCollector::getQueries();
+        $this->assertCount(1, $queries);
+        $this->assertEquals($queryData, $queries[0]);
+    }
+
+    public function test_clear_resets_queries()
+    {
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        PayloadCollector::addQuery(['sql' => 'SELECT 1']);
+        PayloadCollector::clear();
+
+        $this->assertEmpty(PayloadCollector::getQueries());
+    }
+
+    public function test_send_includes_queries_in_payload()
+    {
+        Http::fake();
+
+        Config::set('logger.enabled', true);
+        Config::set('logger.token', 'test-token');
+
+        PayloadCollector::addQuery([
+            'sql' => 'SELECT * FROM users',
+            'bindings' => [],
+            'duration' => 1.5,
+        ]);
+        PayloadCollector::send();
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            $this->assertArrayHasKey('queries', $data);
+            $this->assertCount(1, $data['queries']);
+            $this->assertEquals('SELECT * FROM users', $data['queries'][0]['sql']);
 
             return true;
         });
