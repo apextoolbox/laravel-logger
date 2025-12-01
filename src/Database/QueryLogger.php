@@ -7,6 +7,7 @@ use Illuminate\Database\Events\QueryExecuted;
 
 class QueryLogger
 {
+    private array $queries = [];
     private array $queryPatterns = [];
 
     public function log(QueryExecuted $event): void
@@ -17,7 +18,7 @@ class QueryLogger
 
         $this->queryPatterns[$patternHash] = ($this->queryPatterns[$patternHash] ?? 0) + 1;
 
-        PayloadCollector::addQuery([
+        $this->queries[] = [
             'sql' => $event->sql,
             'bindings' => $this->formatBindings($event->bindings),
             'duration' => $event->time,
@@ -25,50 +26,42 @@ class QueryLogger
             'line_number' => $caller['line'],
             'pattern_hash' => $patternHash,
             'occurred_at' => now()->toISOString(),
-        ]);
+        ];
     }
 
     public function detectN1Queries(): void
     {
-        $queries = PayloadCollector::getQueries();
-        if (empty($queries)) {
+        if (empty($this->queries)) {
             return;
         }
 
         $patternCounts = [];
-        foreach ($queries as $query) {
-            $hash = $query['pattern_hash'] ?? null;
-            if ($hash) {
-                $patternCounts[$hash] = ($patternCounts[$hash] ?? 0) + 1;
-            }
+        foreach ($this->queries as $query) {
+            $hash = $query['pattern_hash'];
+            $patternCounts[$hash] = ($patternCounts[$hash] ?? 0) + 1;
         }
 
         $n1Patterns = array_filter($patternCounts, fn($count) => $count >= 3);
 
-        $updatedQueries = [];
-        foreach ($queries as $query) {
-            $hash = $query['pattern_hash'] ?? null;
-            $query['is_n1'] = isset($n1Patterns[$hash]);
-            $query['duplicate_count'] = $patternCounts[$hash] ?? 1;
-            unset($query['pattern_hash']);
-            $updatedQueries[] = $query;
-        }
+        // Only add N+1 queries to PayloadCollector
+        foreach ($this->queries as $query) {
+            $hash = $query['pattern_hash'];
+            if (!isset($n1Patterns[$hash])) {
+                continue;
+            }
 
-        $this->replaceQueries($updatedQueries);
+            unset($query['pattern_hash']);
+            $query['is_n1'] = true;
+            $query['duplicate_count'] = $patternCounts[$hash];
+
+            PayloadCollector::addQuery($query);
+        }
     }
 
     public function clear(): void
     {
+        $this->queries = [];
         $this->queryPatterns = [];
-    }
-
-    private function replaceQueries(array $queries): void
-    {
-        // Use reflection to replace the queries array
-        $reflection = new \ReflectionClass(PayloadCollector::class);
-        $property = $reflection->getProperty('queries');
-        $property->setAccessible(true);
-        $property->setValue(null, $queries);
     }
 
     private function normalizeQuery(string $sql): string
