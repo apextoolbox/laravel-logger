@@ -38,21 +38,16 @@ class PayloadCollectorTest extends TestCase
 
         // Use reflection to access private data
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $requestDataProperty = $reflection->getProperty('requestData');
-        $requestDataProperty->setAccessible(true);
-        $requestData = $requestDataProperty->getValue();
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+        $incomingRequest = $incomingRequestProperty->getValue();
 
-        $responseDataProperty = $reflection->getProperty('responseData');
-        $responseDataProperty->setAccessible(true);
-        $responseData = $responseDataProperty->getValue();
-
-        $this->assertNotNull($requestData);
-        $this->assertNotNull($responseData);
-        $this->assertEquals('POST', $requestData['method']);
-        $this->assertEquals('/api/test', $requestData['uri']);
-        $this->assertEquals(['key' => 'value'], $requestData['payload']);
-        $this->assertEquals(200, $responseData['status_code']);
-        $this->assertEqualsWithDelta(100, $responseData['duration'], 1); // 100ms ± 1ms
+        $this->assertNotNull($incomingRequest);
+        $this->assertEquals('POST', $incomingRequest['method']);
+        $this->assertEquals('/api/test', $incomingRequest['uri']);
+        $this->assertEquals(['key' => 'value'], $incomingRequest['payload']);
+        $this->assertEquals(200, $incomingRequest['status_code']);
+        $this->assertEqualsWithDelta(100, $incomingRequest['duration'], 1); // 100ms ± 1ms
     }
 
     public function test_collect_ignores_when_disabled()
@@ -66,10 +61,10 @@ class PayloadCollectorTest extends TestCase
         PayloadCollector::collect($request, $response, microtime(true));
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $requestDataProperty = $reflection->getProperty('requestData');
-        $requestDataProperty->setAccessible(true);
-        
-        $this->assertNull($requestDataProperty->getValue());
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+
+        $this->assertNull($incomingRequestProperty->getValue());
     }
 
     public function test_collect_ignores_when_no_token()
@@ -83,10 +78,10 @@ class PayloadCollectorTest extends TestCase
         PayloadCollector::collect($request, $response, microtime(true));
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $requestDataProperty = $reflection->getProperty('requestData');
-        $requestDataProperty->setAccessible(true);
-        
-        $this->assertNull($requestDataProperty->getValue());
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+
+        $this->assertNull($incomingRequestProperty->getValue());
     }
 
     public function test_set_exception_stores_exception_data()
@@ -213,18 +208,14 @@ class PayloadCollectorTest extends TestCase
         PayloadCollector::clear();
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        
-        $requestDataProperty = $reflection->getProperty('requestData');
-        $requestDataProperty->setAccessible(true);
-        
-        $responseDataProperty = $reflection->getProperty('responseData');
-        $responseDataProperty->setAccessible(true);
-        
+
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+
         $exceptionDataProperty = $reflection->getProperty('exceptionData');
         $exceptionDataProperty->setAccessible(true);
 
-        $this->assertNull($requestDataProperty->getValue());
-        $this->assertNull($responseDataProperty->getValue());
+        $this->assertNull($incomingRequestProperty->getValue());
         $this->assertNull($exceptionDataProperty->getValue());
     }
 
@@ -238,13 +229,13 @@ class PayloadCollectorTest extends TestCase
         PayloadCollector::collect($request, null, microtime(true));
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $responseDataProperty = $reflection->getProperty('responseData');
-        $responseDataProperty->setAccessible(true);
-        $responseData = $responseDataProperty->getValue();
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+        $incomingRequest = $incomingRequestProperty->getValue();
 
-        $this->assertNotNull($responseData);
-        $this->assertNull($responseData['status_code']);
-        $this->assertNull($responseData['response']);
+        $this->assertNotNull($incomingRequest);
+        $this->assertNull($incomingRequest['status_code']);
+        $this->assertNull($incomingRequest['response']);
     }
 
     public function test_collect_calculates_duration_correctly()
@@ -254,18 +245,18 @@ class PayloadCollectorTest extends TestCase
 
         $request = Request::create('/api/test', 'GET');
         $response = new Response('test', 200);
-        
+
         $startTime = microtime(true);
         $endTime = $startTime + 0.5; // 500ms
 
         PayloadCollector::collect($request, $response, $startTime, $endTime);
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $responseDataProperty = $reflection->getProperty('responseData');
-        $responseDataProperty->setAccessible(true);
-        $responseData = $responseDataProperty->getValue();
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+        $incomingRequest = $incomingRequestProperty->getValue();
 
-        $this->assertEquals(500, $responseData['duration']);
+        $this->assertEquals(500, $incomingRequest['duration']);
     }
 
     public function test_send_uses_dev_endpoint_when_available()
@@ -442,11 +433,11 @@ class PayloadCollectorTest extends TestCase
         PayloadCollector::collect($request, $response, microtime(true));
 
         $reflection = new \ReflectionClass(PayloadCollector::class);
-        $requestDataProperty = $reflection->getProperty('requestData');
-        $requestDataProperty->setAccessible(true);
-        $requestData = $requestDataProperty->getValue();
+        $incomingRequestProperty = $reflection->getProperty('incomingRequest');
+        $incomingRequestProperty->setAccessible(true);
+        $incomingRequest = $incomingRequestProperty->getValue();
 
-        $this->assertEquals('TestBrowser/1.0', $requestData['user_agent']);
+        $this->assertEquals('TestBrowser/1.0', $incomingRequest['user_agent']);
     }
 
     public function test_add_query_stores_query_data()

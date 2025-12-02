@@ -30,12 +30,16 @@ class QueryLoggerTest extends TestCase
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
 
-        $event = $this->createQueryEvent('SELECT * FROM users WHERE id = ?', [1], 2.5);
+        // Log query 3 times to trigger N+1 detection
+        for ($i = 1; $i <= 3; $i++) {
+            $event = $this->createQueryEvent('SELECT * FROM users WHERE id = ?', [$i], 2.5);
+            $this->queryLogger->log($event);
+        }
 
-        $this->queryLogger->log($event);
+        $this->queryLogger->detectN1Queries();
 
         $queries = PayloadCollector::getQueries();
-        $this->assertCount(1, $queries);
+        $this->assertCount(3, $queries);
         $this->assertEquals('SELECT * FROM users WHERE id = ?', $queries[0]['sql']);
         $this->assertEquals([1], $queries[0]['bindings']);
         $this->assertEquals(2.5, $queries[0]['duration']);
@@ -63,7 +67,7 @@ class QueryLoggerTest extends TestCase
         }
     }
 
-    public function test_detect_n1_queries_does_not_mark_unique_queries()
+    public function test_detect_n1_queries_does_not_send_unique_queries()
     {
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
@@ -74,11 +78,9 @@ class QueryLoggerTest extends TestCase
 
         $this->queryLogger->detectN1Queries();
 
+        // Unique queries should not be sent to PayloadCollector
         $queries = PayloadCollector::getQueries();
-        foreach ($queries as $query) {
-            $this->assertFalse($query['is_n1']);
-            $this->assertEquals(1, $query['duplicate_count']);
-        }
+        $this->assertEmpty($queries);
     }
 
     public function test_clear_resets_query_patterns()
