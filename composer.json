@@ -1,7 +1,7 @@
 {
   "name": "apextoolbox/laravel-logger",
   "description": "Apex Toolbox Laravel Logger",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "library",
   "license": "MIT",
   "autoload": {
