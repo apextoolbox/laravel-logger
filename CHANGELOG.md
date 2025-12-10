@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3]
+
+### Added
+- Global `logException()` helper function for convenient exception logging
+
+### Changed
+- Renamed `ApexToolboxExceptionHandler::capture()` to `ApexToolboxExceptionHandler::logException()` to better align with package naming
+
 ## [0.1.2]
 
 ### Added

@@ -8,9 +8,9 @@ use Throwable;
 class ApexToolboxExceptionHandler
 {
     /**
-     * Capture an exception
+     * Log an exception
      */
-    public static function capture(Throwable $exception): void
+    public static function logException(Throwable $exception): void
     {
         PayloadCollector::setException($exception);
     }
