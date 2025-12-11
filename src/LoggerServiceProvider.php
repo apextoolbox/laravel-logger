@@ -30,7 +30,7 @@ class LoggerServiceProvider extends ServiceProvider
         $this->app->extend(ExceptionHandler::class, function ($handler, $app) {
             $handler->reportable(function (Throwable $exception) use ($handler) {
                 if ($handler->shouldReport($exception)) {
-                    ApexToolboxExceptionHandler::capture($exception);
+                    ApexToolboxExceptionHandler::logException($exception);
                 }
             });
 
@@ -75,7 +75,7 @@ class LoggerServiceProvider extends ServiceProvider
 
         // Handle exceptions that occur outside of HTTP requests (CLI, queue, etc.)
         set_exception_handler(function (Throwable $exception) {
-            ApexToolboxExceptionHandler::capture($exception);
+            ApexToolboxExceptionHandler::logException($exception);
             PayloadCollector::send(); // Send immediately for non-HTTP contexts
             report($exception);
         });
@@ -95,7 +95,7 @@ class LoggerServiceProvider extends ServiceProvider
                     $error['line']
                 );
 
-                ApexToolboxExceptionHandler::capture($exception);
+                ApexToolboxExceptionHandler::logException($exception);
                 PayloadCollector::send(); // Send immediately for fatal errors
             }
         });

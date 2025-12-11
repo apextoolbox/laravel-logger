@@ -23,13 +23,13 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_capture_stores_exception_when_enabled()
+    public function test_log_exception_stores_exception_when_enabled()
     {
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
 
         $exception = new Exception('Test exception');
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         // Check that exception is stored in PayloadCollector
         $reflection = new \ReflectionClass(PayloadCollector::class);
@@ -42,13 +42,13 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $this->assertEquals('Test exception', $data['message']);
     }
 
-    public function test_capture_ignores_exception_when_disabled()
+    public function test_log_exception_ignores_exception_when_disabled()
     {
         Config::set('logger.enabled', false);
         Config::set('logger.token', 'test-token');
 
         $exception = new Exception('Test exception');
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         // Check that no exception is stored in PayloadCollector
         $reflection = new \ReflectionClass(PayloadCollector::class);
@@ -59,13 +59,13 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $this->assertNull($data);
     }
 
-    public function test_capture_ignores_exception_when_no_token()
+    public function test_log_exception_ignores_exception_when_no_token()
     {
         Config::set('logger.enabled', true);
         Config::set('logger.token', '');
 
         $exception = new Exception('Test exception');
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         // Check that no exception is stored in PayloadCollector
         $reflection = new \ReflectionClass(PayloadCollector::class);
@@ -83,7 +83,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         Config::set('logger.token', 'test-token');
 
         $exception = new Exception('Test exception');
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         PayloadCollector::clear();
         
@@ -96,7 +96,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $this->assertNull($data);
     }
 
-    public function test_capture_respects_laravel_should_report_method()
+    public function test_log_exception_respects_laravel_should_report_method()
     {
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
@@ -110,7 +110,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
 
         $validator = $this->app['validator']->make([], ['required_field' => 'required']);
         $exception = new ValidationException($validator);
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         // Check that no exception is stored in PayloadCollector
         $reflection = new \ReflectionClass(PayloadCollector::class);
@@ -122,7 +122,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $this->assertNull($data);
     }
 
-    public function test_capture_allows_exceptions_when_should_report_returns_true()
+    public function test_log_exception_allows_exceptions_when_should_report_returns_true()
     {
         Config::set('logger.enabled', true);
         Config::set('logger.token', 'test-token');
@@ -135,7 +135,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $this->app->instance(ExceptionHandler::class, $mockHandler);
 
         $exception = new Exception('Regular exception');
-        ApexToolboxExceptionHandler::capture($exception);
+        ApexToolboxExceptionHandler::logException($exception);
 
         // Check that exception is stored in PayloadCollector
         $reflection = new \ReflectionClass(PayloadCollector::class);
@@ -143,7 +143,7 @@ class ApexToolboxExceptionHandlerTest extends TestCase
         $exceptionDataProperty->setAccessible(true);
         $data = $exceptionDataProperty->getValue();
         
-        // Should capture the exception because shouldReport returned true
+        // Should log the exception because shouldReport returned true
         $this->assertNotNull($data);
         $this->assertEquals('Regular exception', $data['message']);
     }
