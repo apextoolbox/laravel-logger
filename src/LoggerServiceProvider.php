@@ -50,13 +50,13 @@ class LoggerServiceProvider extends ServiceProvider
         });
 
         Event::listen(JobProcessed::class, function () {
-            $this->app->make(QueryLogger::class)->detectN1Queries();
+            $this->app->make(QueryLogger::class)->flush();
             PayloadCollector::send();
             PayloadCollector::clear();
         });
 
         Event::listen(JobFailed::class, function () {
-            $this->app->make(QueryLogger::class)->detectN1Queries();
+            $this->app->make(QueryLogger::class)->flush();
             PayloadCollector::send();
             PayloadCollector::clear();
         });
@@ -68,7 +68,7 @@ class LoggerServiceProvider extends ServiceProvider
         });
 
         Event::listen(CommandFinished::class, function () {
-            $this->app->make(QueryLogger::class)->detectN1Queries();
+            $this->app->make(QueryLogger::class)->flush();
             PayloadCollector::send();
             PayloadCollector::clear();
         });

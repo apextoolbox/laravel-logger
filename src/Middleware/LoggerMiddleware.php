@@ -49,7 +49,7 @@ class LoggerMiddleware
                 fastcgi_finish_request();
             }
 
-            app(QueryLogger::class)->detectN1Queries();
+            app(QueryLogger::class)->flush();
             PayloadCollector::collect($request, $response, $startTime, $endTime);
             PayloadCollector::send();
         } catch (Throwable $e) {
