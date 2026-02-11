@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace ApexToolbox\Logger\Middleware;
 
-use ApexToolbox\Logger\Database\QueryLogger;
 use ApexToolbox\Logger\PayloadCollector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -49,7 +48,6 @@ class LoggerMiddleware
                 fastcgi_finish_request();
             }
 
-            app(QueryLogger::class)->flush();
             PayloadCollector::collect($request, $response, $startTime, $endTime);
             PayloadCollector::send();
         } catch (Throwable $e) {
@@ -94,7 +92,7 @@ class LoggerMiddleware
         if ($pattern === '*') {
             return true;
         }
-        
+
         // Use fnmatch for pattern matching
         return fnmatch($pattern, $path);
     }

@@ -24,9 +24,25 @@ class HttpRequestLogger
             $url = (string) $request->getUri();
 
             if (!static::shouldSkip($url)) {
+                $headers = PayloadCollector::filterHeaders(
+                    array_map(fn($values) => implode(', ', $values), $request->getHeaders())
+                );
+
+                $bodyContent = (string) $request->getBody();
+                $request->getBody()->rewind();
+
+                $payload = json_decode($bodyContent, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($payload)) {
+                    $payload = PayloadCollector::filterBody($payload);
+                } else {
+                    $payload = $bodyContent;
+                }
+
                 static::$pendingRequests[$url] = [
                     'method' => $request->getMethod(),
                     'url' => $url,
+                    'headers' => $headers,
+                    'payload' => $payload,
                     'start_time' => microtime(true),
                 ];
             }
@@ -43,10 +59,24 @@ class HttpRequestLogger
                 foreach (static::$pendingRequests as $url => $data) {
                     $duration = round((microtime(true) - $data['start_time']) * 1000, 2);
 
+                    $responseHeaders = PayloadCollector::filterHeaders(
+                        array_map(fn($values) => implode(', ', $values), $response->getHeaders())
+                    );
+
+                    $responseBody = (string) $response->getBody();
+                    $response->getBody()->rewind();
+
+                    $contentType = $response->getHeaderLine('Content-Type');
+                    $responseContent = PayloadCollector::filterResponseContent($responseBody, $contentType);
+
                     PayloadCollector::addOutgoingRequest([
                         'method' => $data['method'],
                         'uri' => $url,
+                        'headers' => $data['headers'],
+                        'payload' => $data['payload'],
                         'status_code' => $response->getStatusCode(),
+                        'response_headers' => $responseHeaders,
+                        'response' => $responseContent,
                         'duration' => $duration,
                         'timestamp' => now()->toISOString(),
                     ]);
