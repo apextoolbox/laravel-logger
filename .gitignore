@@ -1,0 +1,42 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+vendor/
+node_modules/
+
+# Composer
+composer.lock
+
+# OS generated files
+temp_auto_push.bat
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Package build artifacts
+*.phar
+
+# Testing
+.phpunit.cache/
+.phpunit.result.cache
+coverage/
+.coverage/
+
+# Logs
+*.log
+.gitignore
+temp_interactive_push.bat
