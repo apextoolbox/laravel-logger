@@ -14,6 +14,7 @@ class PayloadCollector
     private static ?array $incomingRequest = null;
     private static array $logs = [];
     private static array $outgoingRequests = [];
+    private static ?array $exception = null;
     private static bool $sent = false;
 
     public static function setRequestId(string $requestId): void
@@ -71,6 +72,18 @@ class PayloadCollector
         static::$outgoingRequests[] = $requestData;
     }
 
+    public static function setException(array $exceptionData): void
+    {
+        if (!static::isEnabled()) {
+            return;
+        }
+
+        // Only keep the first exception (root cause)
+        if (static::$exception === null) {
+            static::$exception = $exceptionData;
+        }
+    }
+
     /**
      * Send collected data
      */
@@ -80,7 +93,7 @@ class PayloadCollector
             return;
         }
 
-        if (!static::$incomingRequest && empty(static::$logs) && empty(static::$outgoingRequests)) {
+        if (!static::$incomingRequest && empty(static::$logs) && empty(static::$outgoingRequests) && !static::$exception) {
             return;
         }
 
@@ -102,6 +115,7 @@ class PayloadCollector
         static::$incomingRequest = null;
         static::$logs = [];
         static::$outgoingRequests = [];
+        static::$exception = null;
         static::$sent = false;
     }
 
@@ -129,6 +143,10 @@ class PayloadCollector
 
         if (!empty(static::$outgoingRequests)) {
             $payload['outgoing_requests'] = static::$outgoingRequests;
+        }
+
+        if (static::$exception) {
+            $payload['exception'] = static::$exception;
         }
 
         return $payload;
